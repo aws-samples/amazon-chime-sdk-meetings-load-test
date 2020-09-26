@@ -1,5 +1,5 @@
 import {createRequire} from "module";
-import SQSOperations from './SQSOperations.js';
+import SQSOperations from '../SQSOperations.js';
 
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
@@ -37,10 +37,11 @@ class WebRTCStatReport {
 
 
 class MeetingLauncher {
-  static MIN_ACTIVE_TIME_MS = 20000;   //1200000
+  static MIN_ACTIVE_TIME_MS = 600000;   //1200000
   //const MIN_ACTIVE_TIME_MS = 193071;   //1200000
-  static MAX_ACTIVE_TIME_MS = 20500;   //1300000
+  static MAX_ACTIVE_TIME_MS = 600500;   //1300000
   static METRIC_GRAB_FREQUENCY = 1000;
+  static NO_ATTENDEES_PER_MEETING = 10;
   triggerClearInterval = new Map();
   leave = new Map();
 
@@ -62,13 +63,13 @@ class MeetingLauncher {
     }
   }
 
-  createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList) {
+  createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList) {
     return (new Worker('./threads_launcher.js', {
       workerData: {
         start: startIndex,
         range: range,
         threadId: threadId,
-        sessionTimeStamp: sessionTimeStamp,
+        meetingsDirectory: meetingsDirectory,
         meetingAttendeeList: meetingAttendeeList
       }
     }));
@@ -87,7 +88,7 @@ class MeetingLauncher {
     // exec(killCommand);
   }
 
-  spawnThreads(meetingAttendeeList, threadCount, threads, sessionTimeStamp) {
+  spawnThreads(meetingAttendeeList, threadCount, threads, meetingsDirectory) {
     const max = meetingAttendeeList.length;
     //console.log(meetingAttendeeList);
     //console.log(max);
@@ -100,8 +101,8 @@ class MeetingLauncher {
       const range = (max / threadCount);
       for (let threadId = 0; threadId < threadCount; threadId++) {
         const startIndex = start;
-        console.log(startIndex + ' ' + range + ' ' + threadId, sessionTimeStamp);
-        threads.add(this.createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList));
+        console.log(startIndex + ' ' + range + ' ' + threadId, meetingsDirectory);
+        threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
         start += range;
       }
     } else {
@@ -118,13 +119,13 @@ class MeetingLauncher {
       for (let threadId = 0; threadId < threadCount && threadId <= max; threadId++) {
         const startIndex = start;
         if (remainingDataCount > 0) {
-          console.log(startIndex + ' ' + (range + 1) + ' ' + threadId, sessionTimeStamp);
+          console.log(startIndex + ' ' + (range + 1) + ' ' + threadId, meetingsDirectory);
           remainingDataCount -= 1;
-          threads.add(this.createWorkerThread(startIndex, range + 1, threadId, sessionTimeStamp, meetingAttendeeList));
+          threads.add(this.createWorkerThread(startIndex, range + 1, threadId, meetingsDirectory, meetingAttendeeList));
           start += range + 1;
         } else {
-          console.log(startIndex + ' ' + (range) + ' ' + threadId, sessionTimeStamp);
-          threads.add(this.createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList));
+          console.log(startIndex + ' ' + (range) + ' ' + threadId, meetingsDirectory);
+          threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
           start += range;
         }
       }
@@ -142,40 +143,48 @@ class MeetingLauncher {
       let meetingAttendeeListIndex = 0;
       const sqs = new SQSOperations();
 
-      for (let meeting = 0; meeting < noOfMeetings; meeting++) {
+      //for (let meeting = 0; meeting < noOfMeetings; meeting++) {
+      while(meetingAttendeeArray.length < noOfMeetings * MeetingLauncher.NO_ATTENDEES_PER_MEETING ) {
+        console.log('ttertwt ' , meetingAttendeeArray.length);
         try {
-          const meetingAttendeeInfo = await sqs.getCreateMeetingWithAttendeesBodyFromSQS();
-          if (meetingAttendeeInfo && meetingAttendeeInfo.Meeting && meetingAttendeeInfo.Attendees) {
-            const meetingInfo = meetingAttendeeInfo.Meeting;
-            const attendeeInfo = meetingAttendeeInfo.Attendees;
-            for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
-              meetingAttendeeArray[meetingAttendeeListIndex] = {
-                Meeting: meetingInfo,
-                Attendees: attendeeInfo[attendee]
-              };
-              meetingAttendeeListIndex += 1;
-            }
+          const createMeetingWithAttendeesResponses = await sqs.getCreateMeetingWithAttendeesBodyFromSQS();
+          //console.log(createMeetingWithAttendeesResponses);
+          for(let response = 0; response < Math.min(noOfMeetings,createMeetingWithAttendeesResponses.Messages.length); response+=1) {
+            const meetingAttendeeInfo = JSON.parse(createMeetingWithAttendeesResponses.Messages[response].Body);
+            //console.log(meetingAttendeeInfo);
+            if (meetingAttendeeInfo && meetingAttendeeInfo.Meeting && meetingAttendeeInfo.Attendees) {
+              const meetingInfo = meetingAttendeeInfo.Meeting;
+              const attendeeInfo = meetingAttendeeInfo.Attendees;
+              for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
+                meetingAttendeeArray[meetingAttendeeListIndex] = {
+                  Meeting: meetingInfo,
+                  Attendees: attendeeInfo[attendee]
+                };
+                meetingAttendeeListIndex += 1;
+              }
 
-          } else
-            console.log('Empty SQS 0000 ')
+            } else
+              console.log('Empty SQS 0000 ');
+          }
         } catch (err) {
           console.log('Failed ', err.message)
         }
-        console.log('5%5%5% ', meetingAttendeeArray);
+        console.log(meetingAttendeeArray.length, ' meetingAttendeeArray ', meetingAttendeeArray);
       }
 
       if (meetingAttendeeArray.length > 0) {
-        let meetingsDirectory = 'MeetingsDirectory_' + sessionTimeStamp;
+        console.log('meetingAttendeeArrayLength ', meetingAttendeeArray.length);
+        let meetingsDirectory = 'Readings/MeetingsDirectory_' + sessionTimeStamp;
 
         try {
           if (!fs.existsSync(meetingsDirectory)) {
-            fs.mkdirSync(meetingsDirectory)
+            fs.mkdirSync(meetingsDirectory, { recursive: true })
           }
         } catch (err) {
           console.error(err)
         }
 
-        this.spawnThreads(meetingAttendeeArray, threadCount, threads, sessionTimeStamp);
+        this.spawnThreads(meetingAttendeeArray, threadCount, threads, meetingsDirectory);
 
         let rtcStatReport = new WebRTCStatReport();
         for (let worker of threads) {
@@ -279,7 +288,7 @@ class MeetingLauncher {
     const page = [];
 
     browser[workerData.threadId] = await puppeteer.launch({
-      headless: false,
+      headless: true,
       args: [
         '--no-sandbox', '--disable-setuid-sandbox',
         '--use-fake-ui-for-media-stream',
@@ -293,11 +302,13 @@ class MeetingLauncher {
     const sqs = new SQSOperations();
     let fileLocation = new Map();
     let dataToWriteToFile = new Map();
-    let meetingsDirectory = 'MeetingsDirectory_' + workerData.sessionTimeStamp;
+    let meetingsDirectory = workerData.meetingsDirectory;
 
     fs.access(meetingsDirectory, fs.F_OK, (err) => {
       if (err) {
-        fs.mkdirSync(meetingsDirectory);
+        fs.mkdirSync(meetingsDirectory, { recursive: true });
+      } else {
+        if (err) throw err;
       }
     });
 
@@ -315,22 +326,29 @@ class MeetingLauncher {
             console.log('page error occurred: ', pageerr);
           });
 
-          const response = await page[browserTab].goto('http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
+          //const response = await page[browserTab].goto('http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
+          const response = await page[browserTab].goto('https://ocj63wl9di.execute-api.us-east-1.amazonaws.com/Prod/v2/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
             console.log('Failed to load localhost')
           });
           const meetingId = meetingInfo.MeetingId;
           fileLocation[meetingId] = meetingsDirectory + '/' + meetingId;
-          fs.access(fileLocation[meetingId], fs.F_OK, (err) => {
-            if (err) {
-              dataToWriteToFile[meetingId] = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId,timestamp\n'
+
+          try {
+            if (fs.existsSync(fileLocation[meetingId])) {
+              //file exists
+              console.log('bla bla bla');
+            } else {
+              dataToWriteToFile[meetingId] = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId\n'
               fs.writeFile(fileLocation[meetingId] + '.csv', dataToWriteToFile[meetingId], function (err) {
                 if (err) {
                   console.log('Failed to write due to ', err.message + dataToWriteToFile[meetingId]);
                 }
-                console.log('Saved!' + dataToWriteToFile[meetingId]);
+                console.log(meetingId, ' Saved!' + dataToWriteToFile[meetingId]);
               })
             }
-          })
+          } catch(err) {
+            console.error(err)
+          }
         }
       } catch (ex) {
         console.log(ex.message)
@@ -341,8 +359,8 @@ class MeetingLauncher {
     for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
       const meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
       const attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
-      const meetingId = meetingInfo.ExternalMeetingId;
-      const attendeeId = attendeeInfo.ExternalUserId;
+      const meetingId = meetingInfo.ExternalMeetingId || meetingInfo.MeetingId;
+      const attendeeId = attendeeInfo.ExternalUserId || attendeeInfo.MeetingId;
       this.triggerClearInterval[browserTab] = false;
       this.leave[browserTab] = false;
 
@@ -353,6 +371,7 @@ class MeetingLauncher {
             document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendee;
             document.getElementById('authenticate').click();
           }, attendeeId, meetingId, browserTab);
+          console.log('Starting meeting on tab # ', browserTab);
           //await new Promise(resolve => setTimeout(resolve, 750));
         }
       } catch (e) {
@@ -373,6 +392,7 @@ class MeetingLauncher {
           const metricReport = await page[browserTab].evaluate(() => {
 
             return new Promise((resolve, reject) => {
+              console.log();
               if (app) {
                 let metricStatsForTab = app.metricReport;
                 resolve(metricStatsForTab);
@@ -398,6 +418,7 @@ class MeetingLauncher {
         tabRandomDuration[browserTab] = this.getRndDuration();
       }
       setTimeout(async () => {
+        console.log('Attempting to quit meeting tab # ', browserTab);
         try {
           if(page[browserTab]) {
             await page[browserTab].evaluate(async () => {
@@ -457,7 +478,7 @@ class MeetingLauncher {
   }
 
   writeMetricsToFile(webRTCStatReport, attendeeId, fileLocation) {
-    var timestamp = new Date().toISOString();
+    //var timestamp = new Date().toISOString();
     let dataToWrite = '';
     if (typeof (webRTCStatReport.audioPacketsReceived) !== 'undefined') {
       dataToWrite += webRTCStatReport.audioPacketsReceived + ',';
@@ -477,7 +498,8 @@ class MeetingLauncher {
 
     if (dataToWrite !== '') {
       try {
-        const dataToWriteToFile = dataToWrite + attendeeId + ',' + timestamp + '\n';
+        //const dataToWriteToFile = dataToWrite + attendeeId + ',' + timestamp + '\n';
+        const dataToWriteToFile = dataToWrite + attendeeId + '\n';
         fs.appendFile(fileLocation + '.csv', dataToWriteToFile, function (err) {
           if (err) {
             console.log('Failed to write due to ', err.message + dataToWriteToFile);
