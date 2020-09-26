@@ -1,6 +1,3 @@
-# ChimeLoadTest
-
-node thread_launcherV2.js <no of threads> <no of meetings to run>
 
 https://stackoverflow.com/questions/50142049/enospc-no-space-left-on-device-nodejs
 cd demos/browser
