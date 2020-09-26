@@ -34,7 +34,7 @@ class MeetingLauncher {
   static MIN_ACTIVE_TIME_MS = 10000;   //1200000
   static MAX_ACTIVE_TIME_MS = 10500;   //1300000
   static METRIC_GRAB_FREQUENCY = 1000;
-  static FILE_NAME = "./thread_launcherV2.js"
+  static FILE_NAME = "./thread_launcher.js"
   static NO_ATTENDEES_PER_MEETING = 10;
   triggerClearInterval = new Map();
   leave = new Map();
