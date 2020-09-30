@@ -1,6 +1,5 @@
 import {createRequire} from 'module';
 import SQSOperations from './SQSOperations.js';
-
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
 const {exec} = require('child_process');
@@ -31,8 +30,8 @@ class WebRTCStatReport {
 }
 
 class MeetingLauncher {
-  static MIN_ACTIVE_TIME_MS = 10000;   //1200000
-  static MAX_ACTIVE_TIME_MS = 10500;   //1300000
+  static MIN_ACTIVE_TIME_MS = 20000;   //1200000
+  static MAX_ACTIVE_TIME_MS = 20500;   //1300000
   static METRIC_GRAB_FREQUENCY = 1000;
   static FILE_NAME = "./thread_launcher.js"
   static NO_ATTENDEES_PER_MEETING = 10;
@@ -71,12 +70,12 @@ class MeetingLauncher {
 
   cleanup() {
     exec(`ps -aux | grep 'puppeteer' | xargs kill -9`);
-    exec(`ps -aux | grep 'node' | xargs kill -9`);
-    exec(`cd node_module`);
-    exec(`rm -rf puppeteer`);
+    //exec(`ps -aux | grep 'node' | xargs kill -9`);
+    //exec(`cd node_module`);
+    //exec(`rm -rf puppeteer`);
   }
 
-  spawnThreads(meetingAttendeeList, threadCount, threads, meetingsDirectory) {
+  async spawnThreads(meetingAttendeeList, threadCount, threads, meetingsDirectory) {
     const max = meetingAttendeeList.length;
     const min = 0;
     console.log(`Running with ${threadCount} threads...`);
@@ -88,6 +87,7 @@ class MeetingLauncher {
         const startIndex = start;
         console.log(startIndex + ' ' + range + ' ' + threadId, meetingsDirectory);
         threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
+        this.putMetricData("thread_created", 1);
         start += range;
       }
     } else {
@@ -103,14 +103,20 @@ class MeetingLauncher {
           console.log(startIndex + ' ' + (range + 1) + ' ' + threadId, meetingsDirectory);
           remainingDataCount -= 1;
           threads.add(this.createWorkerThread(startIndex, range + 1, threadId, meetingsDirectory, meetingAttendeeList));
+          this.putMetricData("thread_created", 1);
           start += range + 1;
         } else {
           console.log(startIndex + ' ' + (range) + ' ' + threadId, meetingsDirectory);
           threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
+          this.putMetricData("thread_created", 1);
           start += range;
         }
       }
     }
+  }
+
+  putMetricData(metricName, metricValue, namespace = "CustomLT1") {
+    exec(`aws cloudwatch put-metric-data --metric-name ${metricName} --dimensions Instance=i-0c51f9f1213e63159  --namespace ${namespace} --value ${metricValue}`);
   }
 
   async run() {
@@ -120,7 +126,7 @@ class MeetingLauncher {
       const noOfMeetings = process.argv[3] || 10;
       const threads = new Set();
       let meetingAttendeeList = new SharedArrayBuffer();
-      const meetingAttendeeArray = new Array();
+      let meetingAttendeeArray = new Array();
       let meetingAttendeeListIndex = 0;
       const sqs = new SQSOperations();
 
@@ -145,12 +151,14 @@ class MeetingLauncher {
               this.log('Empty SQS');
           }
         } catch (err) {
-          this.error('Failed SQS retrieval', err.message)
+          this.error('Failed SQS retrieval' + err.message)
         }
-        this.log(meetingAttendeeArray.length, ' meetingAttendeeArray ', meetingAttendeeArray);
+        this.log(meetingAttendeeArray.length + ' meetingAttendeeArray ' + meetingAttendeeArray);
       }
       if (meetingAttendeeArray.length > 0) {
         this.log('meetingAttendeeArrayLength ' + meetingAttendeeArray.length);
+        this.putMetricData("meetingAttendeeArrayLength", meetingAttendeeArray.length);
+
         let meetingsDirectory = 'Readings/MeetingsDirectory_' + sessionTimeStamp;
 
         try {
@@ -170,10 +178,12 @@ class MeetingLauncher {
           worker.on('exit', () => {
             threads.delete(worker);
             console.log(`Thread exiting, ${threads.size} running...`);
+            this.putMetricData("thread_exit", 1);
             if (threads.size === 0) {
               console.log('Threads ended');
               this.printRTCStatReport(rtcStatReport, threadCount, this.realTimeMetricAggregate);
-              meetingAttendeeList = [];
+              meetingAttendeeList = null;
+              meetingAttendeeArray = null;
               this.cleanup()
             }
           });
@@ -193,15 +203,16 @@ class MeetingLauncher {
 
   log(str, tabNo = '') {
     if (isMainThread) {
-      console.log('[Master Thread Error] ' + str);
+      console.log('[Master Thread] ' + str);
     } else {
-      console.log(workerData.threadId + '  ' + tabNo + ' [ChildThread] ' + str);
+      console.log(workerData.threadId + '  ' + tabNo + ' [Child Thread] ' + str);
     }
   }
 
   error(str, tabNo = '') {
+    this.putMetricData("[ERROR]", 1);
     if (isMainThread) {
-      console.log('[Master Thread Error] ' + str);
+      console.log('[Master Thread ERROR] ' + str);
     } else {
       console.log(workerData.threadId + '  ' + tabNo + ' [Child Thread Error] ' + str);
     }
@@ -224,8 +235,8 @@ class MeetingLauncher {
         '--no-sandbox', '--disable-setuid-sandbox',
         '--single-process', '--no-zygote'
       ],
-    }).catch((er) => {
-      this.error('Browser launch failed', er)
+    }).catch((err) => {
+      this.error('Browser launch failed', err)
     });
 
     webRTCStatReport[workerData.threadId] = new WebRTCStatReport();
@@ -252,30 +263,34 @@ class MeetingLauncher {
           page[browserTab].on('error', err => {
             this.error('Error occured: ' + err, browserTab);
           });
-
-          const response = await page[browserTab].goto('http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo))).catch((ex) => {
-            this.error('Failed to load  ', ex)
+          const url = 'http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo));
+          const response = await page[browserTab].goto(url).catch((err) => {
+            this.error('Failed to load  ' + err);
             page[browserTab] = null;
+            this.putMetricData("BrowserTabOpenFail", 1);
           }).then(() => {
-            this.log('Opened localhost.... ', browserTab)
+            this.log('Opened localhost.... ', browserTab);
+            this.putMetricData("BrowserTabOpenSuccess", 1);
+
           });
           const meetingId = meetingInfo.MeetingId;
-          fileLocation[meetingId] = meetingsDirectory + '/' + meetingId;
-
-          try {
-            if (fs.existsSync(fileLocation[meetingId])) {
-              this.log('file exists');
-            } else {
-              dataToWriteToFile[meetingId] = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId\n'
-              fs.writeFile(fileLocation[meetingId] + '.csv', dataToWriteToFile[meetingId], function (err) {
-                if (err) {
-                  console.log('Failed to write due to ' + err.message + dataToWriteToFile[meetingId]);
-                }
-                console.log(meetingId, ' Saved!' + dataToWriteToFile[meetingId]);
-              })
+          if(!fileLocation.has(meetingId)){
+            fileLocation[meetingId] = meetingsDirectory + '/' + meetingId;
+            try {
+              if (fs.existsSync(fileLocation[meetingId])) {
+                this.log('file exists');
+              } else {
+                dataToWriteToFile[meetingId] = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId\n'
+                fs.writeFile(fileLocation[meetingId] + '.csv', dataToWriteToFile[meetingId], function (err) {
+                  if (err) {
+                    console.log('Failed to write due to ' + err.message + dataToWriteToFile[meetingId]);
+                  }
+                  console.log(meetingId, ' Saved!' + dataToWriteToFile[meetingId]);
+                })
+              }
+            } catch (err) {
+              this.error('File write: ' + err)
             }
-          } catch (err) {
-            this.error('File write: ' + err)
           }
         }
       }
@@ -284,23 +299,36 @@ class MeetingLauncher {
       for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
         const meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
         const attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
-        const meetingId = meetingInfo.ExternalMeetingId || meetingInfo.MeetingId;
-        const attendeeId = attendeeInfo.ExternalUserId || attendeeInfo.MeetingId;
+        const meetingId = meetingInfo.MeetingId;
+        const attendeeId = attendeeInfo.AttendeeId;
         this.triggerClearInterval[browserTab] = false;
         this.leave[browserTab] = false;
 
         try {
           if (page[browserTab] !== null) {
-
-            await page[browserTab].evaluate((attendee, meetingId, browserTab) => {
-              document.getElementById('inputMeeting').value = meetingId;
-              document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendee;
-              document.getElementById('authenticate').click();
+            const meetingStartStatus = await page[browserTab].evaluate((attendeeId, meetingId, browserTab) => {
+              return new Promise((resolve, reject) => {
+                try {
+                  document.getElementById('inputMeeting').value = meetingId;
+                  document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendeeId;
+                  document.getElementById('authenticate').click();
+                  resolve('Success');
+                } catch (err) {
+                  resolve('Fail');
+                }
+              });
             }, attendeeId, meetingId, browserTab);
-            this.log('Starting meeting on tab # ', browserTab);
+            if(meetingStartStatus === 'Success') {
+              this.log('Meeting start SUCCESS on tab # ', browserTab);
+              this.putMetricData("MeetingStartSuccess", 1);
+            } else {
+              this.log('Meeting start FAIL on tab # ', browserTab);
+              this.putMetricData("MeetingStartFail", 1);
+            }
           }
-        } catch (ex) {
-          this.error('Exception on page evaluate ' + ex, browserTab);
+        } catch (err) {
+          this.error('Exception on page evaluate ' + err, browserTab);
+          this.putMetricData("MeetingStartFailPageEvaluate", 1);
         }
         await this.fetchMetricsFromBrowser(browser, page, reportFetch, meetingInfo, attendeeInfo, fileLocation, browserTab);
       }
@@ -334,15 +362,15 @@ class MeetingLauncher {
                   let metricStatsForTab = app.metricReport;
                   resolve(metricStatsForTab);
                 }
-              } catch (ex) {
-                this.error(ex, ' App is undefined');
+              } catch (err) {
+                this.error('App is undefined ' + err);
               }
             });
           });
           if (metricReport.audioDecoderLoss || metricReport.audioPacketsReceived || metricReport.audioPacketsReceivedFractionLoss || metricReport.audioSpeakerDelayMs || metricReport.availableReceiveBandwidth || metricReport.availableSendBandwidth) {
             this.writeMetricsToFile(metricReport, attendeeInfo.AttendeeId, fileLocation[meetingInfo.MeetingId]);
           } else {
-            this.error('Meeting inactive');
+            this.log('Meeting inactive');
           }
           //this.writeMetric(metricReport, webRTCStatReport, this.realTimeMetricAggregate);
         }
@@ -359,15 +387,17 @@ class MeetingLauncher {
         tabRandomDuration[browserTab] = this.getRndDuration();
       }
       setTimeout(async () => {
-        this.log('Attempting to quit meeting, tab # ', browserTab);
         try {
           if (page[browserTab]) {
             await page[browserTab].evaluate(async () => {
               document.getElementById('button-meeting-leave').click();
             });
+            this.log('Attempting to quit meeting, tab # ', browserTab);
+            this.putMetricData("MeetingEndSuccess", 1);
           }
-        } catch (e) {
-          this.error('an exception on page.evaluate ', e);
+        } catch(err) {
+          this.error('Failed to end meeting ' + err);
+          this.putMetricData("MeetingEndFail", 1);
         } finally {
           this.leave[browserTab] = true;
           this.triggerClearInterval[browserTab] = true;
@@ -393,6 +423,7 @@ class MeetingLauncher {
       }
       this.log('Close browser initiated');
       await browser.close();
+      this.putMetricData("BrowserClose", 1);
     } else {
       return;
     }

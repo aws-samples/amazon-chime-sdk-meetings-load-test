@@ -108,7 +108,7 @@ export default class SQSOperations {
 
 // for (let i = 0; i < 70; i++) {
 //     if (i === 0) {
-//       purgeMessageQueue()
+//        purgeMessageQueue()
 //     }
 //     const sqsOperations = new SQSOperations();
 //     for (let j = 0; j < 30000; j++) {}

@@ -1,16 +1,11 @@
-import {createRequire} from "module";
-import sqsOperations from './sqsOperations.js';
+import {createRequire} from 'module';
+import SQSOperations from './SQSOperations.js';
 
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
 const {exec} = require('child_process');
-
-var fs = require('fs');
-
+const fs = require('fs');
 const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
-
-
-const {EventEmitter} = require('events');
 
 class WebRTCStatReport {
   constructor() {
@@ -19,7 +14,6 @@ class WebRTCStatReport {
     this.audioPacketsReceivedFractionLossTotal = 0;
     this.audioSpeakerDelayMsTotal = 0;
     this.availableReceiveBandwidthTotal = 0;
-    // this.availableSendBandwidthTotal = 0;
     this.totalReadings = 0;
 
     this.audioDecoderLossMinMax = [];
@@ -27,690 +21,73 @@ class WebRTCStatReport {
     this.audioPacketsReceivedFractionLossMinMax = [];
     this.audioSpeakerDelayMsMinMax = [];
     this.availableReceiveBandwidthMinMax = [];
-    //this.availableSendBandwidthMinMax = [0,0];
 
     this.audioDecoderLossAvg = 0;
     this.audioPacketsReceivedAvg = 0;
     this.audioPacketsReceivedFractionLossAvg = 0;
     this.audioSpeakerDelayMsAvg = 0;
     this.availableReceiveBandwidthAvg = 0;
-    //this.availableSendBandwidthAvg = 0;
   }
 }
-
-
-class MeetingLauncher {
-  static MIN_ACTIVE_TIME_MS = 50000;   //1200000
-  //const MIN_ACTIVE_TIME_MS = 193071;   //1200000
-  static MAX_ACTIVE_TIME_MS = 50500;   //1300000
-
-  constructor() {
-    this.browserThreadMap = [];
-    this.run();
-    this.done = 0;
-
-  }
-
-  getRndDuration() {
-    return Math.floor(Math.random() * (MeetingLauncher.MAX_ACTIVE_TIME_MS - MeetingLauncher.MIN_ACTIVE_TIME_MS + 1)) + MeetingLauncher.MIN_ACTIVE_TIME_MS;
-  }
-
-
-  async done() {
-    try {
-      console.log('Done ' + done);
-      this.done = done + 1;
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList) {
-    return (new Worker('./threads_launcher.js', {
-      workerData: {
-        start: startIndex,
-        range: range,
-        threadId: threadId,
-        sessionTimeStamp: sessionTimeStamp,
-        meetingAttendeeList: meetingAttendeeList
-      }
-    }));
-  }
-
-  cleanup() {
-
-    exec(`ps -aux | grep 'puppeteer' | xargs kill -9`);
-    exec(`ps -aux | grep 'chrome' | xargs kill -9`)
-    // const whoami = exec("whoami", { encoding: 'utf-8' });
-    // console.log(whoami);
-    // change the username to ec2user and add somne delay
-    // prefer to use `ps -aux | grep 'puppeteer' | xargs kill -9`
-    // const killCommand = "pgrep -U ridip|xargs kill -9";
-    // console.log(killCommand);
-    // exec(killCommand);
-  }
-
-  spawnThreads(meetingAttendeeList, threadCount, threads, sessionTimeStamp) {
-    const max = meetingAttendeeList.length;
-    console.log(meetingAttendeeList);
-    console.log(max);
-    const min = 0;
-    console.log(`Running with ${threadCount} threads...`);
-
-    let start = min;
-
-    if (max % threadCount === 0) {
-      const range = (max / threadCount);
-      for (let threadId = 0; threadId < threadCount; threadId++) {
-        const startIndex = start;
-        console.log(startIndex + ' ' + range + ' ' + threadId, sessionTimeStamp);
-        threads.add(this.createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList));
-        this.browserThreadMap.push(0);
-        start += range;
-      }
-    } else {
-      let range = 1;
-      if (threadCount <= max)
-        range = Math.floor(max / threadCount);
-      else
-        range = Math.ceil(max / threadCount);
-
-      console.log(range);
-      let remainingDataCount = max - range * threadCount;
-      console.log(remainingDataCount);
-
-      for (let threadId = 0; threadId < threadCount && threadId <= max; threadId++) {
-        const startIndex = start;
-        if (remainingDataCount > 0) {
-          console.log(startIndex + ' ' + (range + 1) + ' ' + threadId, sessionTimeStamp);
-          remainingDataCount -= 1;
-          threads.add(this.createWorkerThread(startIndex, range + 1, threadId, sessionTimeStamp, meetingAttendeeList));
-          start += range + 1;
-        } else {
-          console.log(startIndex + ' ' + (range) + ' ' + threadId, sessionTimeStamp);
-          threads.add(this.createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList));
-          start += range;
-        }
-        this.browserThreadMap.push(0);
-      }
-    }
-  }
-
-  async run() {
-    if (isMainThread) {
-      const sessionTimeStamp = new Date().toISOString();
-
-      // This code is executed in the main thread and not in the worker.
-      const threadCount = process.argv[2] || 2;
-      const noOfMeetings = process.argv[3] || 10;
-      const threads = new Set();
-      const meetingAttendeeArray = new Array();
-      let meetingAttendeeListIndex = 0;
-      const sqs = new sqsOperations();
-
-      for (let meeting = 0; meeting < noOfMeetings; meeting++) {
-        try {
-          const meetingAttendeeInfo = await sqs.getCreateMeetingWithAttendeesBodyFromSQS();
-          if(meetingAttendeeInfo && meetingAttendeeInfo.Meeting && meetingAttendeeInfo.Attendees) {
-            console.log(meetingAttendeeInfo.Meeting);
-            console.log(meetingAttendeeInfo.Attendees);
-            const meetingInfo = meetingAttendeeInfo.Meeting;
-            const attendeeInfo = meetingAttendeeInfo.Attendees;
-            for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
-              meetingAttendeeArray[meetingAttendeeListIndex] = {Meeting: meetingInfo, Attendees:attendeeInfo[attendee]};
-              meetingAttendeeListIndex += 1;
-            }
-
-          }
-      else
-          console.log('Failed to read from SQS 0000 ')
-        } catch (err) {
-          console.log('Failed ', err.message)
-        }
-
-      }
-console.log('09876 %%++%% ',meetingAttendeeArray);
-      if(meetingAttendeeArray.length > 0) {
-        this.spawnThreads(meetingAttendeeArray, threadCount, threads, sessionTimeStamp);
-      }
-      let rtcStatReport = new WebRTCStatReport();
-      var buff = new SharedArrayBuffer(1);
-      var   arr = new Int8Array(buff);
-      for (let worker of threads) {
-        worker.on('error', (err) => {
-          console.error(err)
-        });
-
-        worker.on('exit', () => {
-          threads.delete(worker);
-          console.log(`Thread exiting, ${threads.size} running...`);
-          if (threads.size === 0) {
-            console.log('Threads ended');
-            // const totalReadings = rtcStatReport.totalReadings;
-            // console.log('totalReadings: ' + totalReadings);
-            // console.log('audioDecoderLoss Avg: ' + rtcStatReport.audioDecoderLossAvg / threadCount);
-            // console.log('audioPacketsReceived Avg: ' + rtcStatReport.audioPacketsReceivedAvg / threadCount);
-            // console.log('audioPacketsReceivedFractionLoss Avg: ' + rtcStatReport.audioPacketsReceivedFractionLossAvg / threadCount);
-            // console.log('audioSpeakerDelayMs Avg: ' + rtcStatReport.audioSpeakerDelayMsAvg / threadCount);
-            // console.log('availableReceiveBandwidth Avg: ' + rtcStatReport.availableReceiveBandwidthAvg / threadCount);
-            // //console.log('availableSendBandwidth Avg: ' + rtcStatReport.availableSendBandwidthAvg / threadCount);
-            //
-            // console.log('totalReadings: ' + totalReadings);
-            // console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
-            // console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
-            // console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
-            // console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
-            //console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
-            //console.log('availableSendBandwidth MinMax: ' + rtcStatReport.availableSendBandwidthMinMax);
-            this.cleanup()
-          }
-        });
-
-        worker.on('message', async (message) => {
-          const threadStatReport = message.webRTCStatReport;
-          console.log('threadStatReport ----  ');
-          console.log(message);
-          const threadId = message.threadId;
-          // rtcStatReport.audioDecoderLossAvg += threadStatReport.audioDecoderLossAvg;
-          // rtcStatReport.audioPacketsReceivedAvg += threadStatReport.audioPacketsReceivedAvg;
-          // rtcStatReport.audioPacketsReceivedFractionLossAvg += threadStatReport.audioPacketsReceivedFractionLossAvg;
-          // rtcStatReport.audioSpeakerDelayMsAvg += threadStatReport.audioSpeakerDelayMsAvg;
-          // rtcStatReport.availableReceiveBandwidthAvg += threadStatReport.availableReceiveBandwidthAvg;
-          // //rtcStatReport.availableSendBandwidthAvg += threadStatReport.availableSendBandwidthAvg;
-          // rtcStatReport.totalReadings += threadStatReport.totalReadings;
-          //
-          //
-          // console.log('audioDecoderLoss MinMax: ' + threadStatReport.audioDecoderLossMinMax);
-          // console.log('audioPacketsReceived MinMax: ' + threadStatReport.audioPacketsReceivedMinMax);
-          // console.log('audioPacketsReceivedFractionLoss MinMax: ' + threadStatReport.audioPacketsReceivedFractionLossMinMax);
-          // console.log('audioSpeakerDelayMs MinMax: ' + threadStatReport.audioSpeakerDelayMsMinMax);
-          // console.log('availableReceiveBandwidth MinMax: ' + threadStatReport.availableReceiveBandwidthMinMax);
-          // //console.log('availableSendBandwidth MinMax: ' + threadStatReport.availableSendBandwidthMinMax);
-          //
-          // console.log(' -------- - - - --------------------- - - - ---------------------');
-          // console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
-          // console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
-          // console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
-          // console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
-          // console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
-          // //console.log('availableSendBandwidth MinMax: ' + rtcStatReport.availableSendBandwidthMinMax);
-          //
-          //
-          // rtcStatReport.audioDecoderLossMinMax[0] = !rtcStatReport.audioDecoderLossMinMax[0] ? threadStatReport.audioDecoderLossMinMax[0] : Math.min(rtcStatReport.audioDecoderLossMinMax[0], threadStatReport.audioDecoderLossMinMax[0]);
-          // rtcStatReport.audioDecoderLossMinMax[1] = !rtcStatReport.audioDecoderLossMinMax[1] ? threadStatReport.audioDecoderLossMinMax[1] : Math.max(rtcStatReport.audioDecoderLossMinMax[1], threadStatReport.audioDecoderLossMinMax[1]);
-          //
-          // rtcStatReport.audioPacketsReceivedMinMax[0] = !rtcStatReport.audioPacketsReceivedMinMax[0] ? threadStatReport.audioPacketsReceivedMinMax[0] : Math.min(rtcStatReport.audioPacketsReceivedMinMax[0], threadStatReport.audioPacketsReceivedMinMax[0]);
-          // rtcStatReport.audioPacketsReceivedMinMax[1] = !rtcStatReport.audioPacketsReceivedMinMax[1] ? threadStatReport.audioPacketsReceivedMinMax[1] : Math.max(rtcStatReport.audioPacketsReceivedMinMax[1], threadStatReport.audioPacketsReceivedMinMax[1]);
-          //
-          // rtcStatReport.audioPacketsReceivedFractionLossMinMax[0] = !rtcStatReport.audioPacketsReceivedFractionLossMinMax[0] ? threadStatReport.audioPacketsReceivedFractionLossMinMax[0] : Math.min(rtcStatReport.audioPacketsReceivedFractionLossMinMax[0], threadStatReport.audioPacketsReceivedFractionLossMinMax[0]);
-          // rtcStatReport.audioPacketsReceivedFractionLossMinMax[1] = !rtcStatReport.audioPacketsReceivedFractionLossMinMax[1] ? threadStatReport.audioPacketsReceivedFractionLossMinMax[1] : Math.max(rtcStatReport.audioPacketsReceivedFractionLossMinMax[1], threadStatReport.audioPacketsReceivedFractionLossMinMax[1]);
-          //
-          // rtcStatReport.audioSpeakerDelayMsMinMax[0] = !rtcStatReport.audioSpeakerDelayMsMinMax[0] ? threadStatReport.audioSpeakerDelayMsMinMax[0] : Math.min(rtcStatReport.audioSpeakerDelayMsMinMax[0], threadStatReport.audioSpeakerDelayMsMinMax[0]);
-          // rtcStatReport.audioSpeakerDelayMsMinMax[1] = !rtcStatReport.audioSpeakerDelayMsMinMax[1] ? threadStatReport.audioSpeakerDelayMsMinMax[1] : Math.max(rtcStatReport.audioSpeakerDelayMsMinMax[1], threadStatReport.audioSpeakerDelayMsMinMax[1]);
-          //
-          // rtcStatReport.availableReceiveBandwidthMinMax[0] = !rtcStatReport.availableReceiveBandwidthMinMax[0] ? threadStatReport.availableReceiveBandwidthMinMax[0] : Math.min(rtcStatReport.availableReceiveBandwidthMinMax[0], threadStatReport.availableReceiveBandwidthMinMax[0]);
-          // rtcStatReport.availableReceiveBandwidthMinMax[1] = !rtcStatReport.availableReceiveBandwidthMinMax[1] ? threadStatReport.availableReceiveBandwidthMinMax[1] : Math.max(rtcStatReport.availableReceiveBandwidthMinMax[1], threadStatReport.availableReceiveBandwidthMinMax[1]);
-
-          // console.log(' --------  - - - --------------------- - - - ---------------------');
-          // console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
-          // console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
-          // console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
-          // console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
-          // console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
-
-        });
-      }
-    } else {
-      this.childThreadActivity();
-      const used = process.memoryUsage();
-      for (let key in used) {
-        console.log(`${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB`);
-      }
-    }
-  }
-
-  async childThreadActivity() {
-    const browser = {};
-    const tabRandomDuration = new Map();
-    const reportFetch = new Map();
-    const triggerClearInterval = new Map();
-    const webRTCStatReport = {};
-    const page = [];
-
-    browser[workerData.threadId] = await puppeteer.launch({
-      headless: false,
-      args: [
-        '--no-sandbox', '--disable-setuid-sandbox',
-        '--use-fake-ui-for-media-stream',
-        '--use-fake-device-for-media-stream',
-        '--hostname localhost',
-        '--no-sandbox', '--disable-setuid-sandbox',
-        '--single-process', '--no-zygote'
-      ],
-    });
-
-    this.browserThreadMap[workerData.threadId] = browser;
-    webRTCStatReport[workerData.threadId] = new WebRTCStatReport();
-    const sqs = new sqsOperations();
-    let meetingsDirectory = 'MeetingsDirectory_' + workerData.sessionTimeStamp;
-    fs.existsSync(meetingsDirectory) || fs.mkdirSync(meetingsDirectory);
-    let fileLocation = '';
-
-
-    try {
-      for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-        let meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
-        let attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
-        const meetingId = meetingInfo.MeetingId;
-        fileLocation = meetingsDirectory + '/' + meetingId;
-        if (!fs.existsSync(fileLocation)) {
-          const dataToWriteToFile = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId,timestamp\n'
-          fs.writeFile(fileLocation + '.csv', dataToWriteToFile, function (err) {
-            if (err) {
-              console.log('Failed to write due to ', err.message + dataToWriteToFile);
-            }
-            console.log('Saved!' + dataToWriteToFile);
-          });
-        }
-
-        if(meetingInfo && attendeeInfo) {
-          console.log('1111 ', meetingInfo)
-          console.log('2222 ', attendeeInfo)
-
-            page[browserTab] = await browser[workerData.threadId].newPage();
-            page[browserTab].on('error', err => {
-              console.log('error occured: ', err);
-            });
-            page[browserTab].on('page error', pageerr => {
-              console.log('page error occurred: ', pageerr);
-            });
-
-            const response = await page[browserTab].goto('http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
-              //const response = await page[browserTab].goto('http://127.0.0.1:8080/meetingInfo=hjhkj&attendeeInfo=hj', { method:"POST", data: reformatFirstRequest }).catch(() => {
-              console.log('Failed to load localhost')
-            });
-
-        }
-      }
-    } catch (ex) {
-      console.log(ex.message)
-    }
-
-    const now = Date.now();
-
-
-
-    for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-      const meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
-      const attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
-      triggerClearInterval[browserTab] = false;
-      if (!tabRandomDuration.has(browserTab)) {
-        tabRandomDuration[browserTab] = this.getRndDuration();
-      }
-      try {
-        await page[browserTab].evaluate((attendee, meetingId, browserTab) => {
-          document.getElementById('inputMeeting').value = meetingId;
-          document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendee;
-          document.getElementById('authenticate').click();
-        }, attendeeInfo.ExternalUserId, meetingInfo.ExternalUserId, browserTab);
-      } catch (e) {
-        console.log('an expection on page.evaluate ', e);
-      }
-      await new Promise(resolve => setTimeout(resolve, 750));
-
-      reportFetch[browserTab] = setInterval(async () => {
-        try {
-          //console.log(workerData.threadId, 'triggerClearInterval ', triggerClearInterval);
-
-          if (triggerClearInterval[browserTab] === false && browser[workerData.threadId].isConnected()) {
-            const metricReport = await page[browserTab].evaluate(() => {
-
-              return new Promise((resolve, reject) => {
-                if (app) {
-                  let metricStatsForTab = app.metricReport;
-                  resolve(metricStatsForTab);
-                }
-              });
-            });
-
-            if (metricReport) {
-              var now_2 = Date.now();
-              console.log(now_2 - now);
-              console.log(now_2);
-              console.log(now);
-              //const metricsStr = this.writeMetric(metricReport, webRTCStatReport);
-              //console.log(workerData.threadId + '--> ' + browserTab + ' : ' + meetingId + ' : ' + attendeeId + ' : ' + metricsStr);
-              //console.log(metricReport)
-              this.writeMetricsToFile(metricReport, attendeeInfo.AttendeeId, fileLocation);
-            }
-          }
-        } catch (err) {
-          console.log(err.message)
-        }
-      }, 1000);
-      console.log('reportFetch[browserTab] ', reportFetch[browserTab]);
-      setTimeout(async () => {
-        triggerClearInterval[browserTab] = true;
-        try {
-          await page[browserTab].evaluate(async () => {
-            document.getElementById('button-meeting-leave').click();
-          });
-        } catch (e) {
-          console.log('an expection on page.evaluate ', e);
-        }
-        //console.log('clear interval called');
-
-        if (triggerClearInterval[browserTab] === true) {
-          console.log(browserTab + ' clear interval called');
-          clearInterval(reportFetch[browserTab]);
-        }
-      }, tabRandomDuration[browserTab]);
-    }
-
-    if (browser[workerData.threadId].isConnected()) {
-      await new Promise((resolve) => {
-        console.log(workerData.threadId + ' sleepinggggggg forrrrrrrr', MeetingLauncher.MAX_ACTIVE_TIME_MS, ' browser ', browser);
-        setTimeout(resolve, MeetingLauncher.MAX_ACTIVE_TIME_MS)
-      });
-      console.log('Close browser initiated');
-      await browser[workerData.threadId].close();
-
-      //this.individualThreadWebRTCAvgReading(webRTCStatReport);
-
-    }
-    parentPort.postMessage({threadId: workerData.threadId, webRTCStatReport: webRTCStatReport[workerData.threadId]});
-  }
-
-
-  writeMetricsToFile(webRTCStatReport, attendeeId, fileLocation) {
-    console.log(webRTCStatReport)
-    console.log(fileLocation)
-    var timestamp = new Date().toISOString();
-    // var utcDate = new Date(date.toUTCString());
-    // utcDate.setHours(utcDate.getHours()-7);
-    // var now = new Date(utcDate);
-    // var strNow = now.getUTCFullYear().toString() + "/" +
-    //   (now.getUTCMonth() + 1).toString() +
-    //   "/" + now.getUTCDate() + " " + now.getUTCHours() +
-    //   ":" + now.getUTCMinutes() + ":" + now.getUTCSeconds();
-
-    let dataToWrite = '';
-    if (typeof (webRTCStatReport.audioPacketsReceived) !== 'undefined') {
-      dataToWrite += webRTCStatReport.audioPacketsReceived + ',';
-    }
-    if (typeof (webRTCStatReport.audioDecoderLoss) !== 'undefined') {
-      dataToWrite += webRTCStatReport.audioDecoderLoss + ',';
-    }
-    if (typeof (webRTCStatReport.audioPacketsReceivedFractionLoss) !== 'undefined') {
-      dataToWrite += Math.min(Math.max(webRTCStatReport.audioPacketsReceivedFractionLoss, 0), 1) + ',';
-    }
-    if (typeof (webRTCStatReport.audioSpeakerDelayMs) !== 'undefined') {
-      dataToWrite += webRTCStatReport.audioSpeakerDelayMs + ',';
-    }
-    if (typeof (webRTCStatReport.availableSendBandwidth) !== 'undefined') {
-      dataToWrite += webRTCStatReport.availableSendBandwidth + ',';
-    }
-
-    // fs.mkdir(meetingsDirectory, (err) => {
-    //
-    //   console.log(meetingsDirectory + 'Created');
-    // });
-
-    if (dataToWrite !== '') {
-      const dataToWriteToFile = dataToWrite + attendeeId + ',' + timestamp + '\n';
-      fs.appendFile(fileLocation + '.csv', dataToWriteToFile, function (err) {
-        if (err) {
-          console.log('Failed to write due to ', err.message + dataToWriteToFile);
-        }
-        console.log('Saved!' + dataToWriteToFile);
-      });
-    }
-
-  }
-
-
-  individualThreadWebRTCAvgReading(webRTCStatReport) {
-    const threadWebRTCStatReport = webRTCStatReport[workerData.threadId];
-    const totalReadingsByWorkerThread = threadWebRTCStatReport.totalReadings;
-    if (threadWebRTCStatReport.totalReadings > 0) {
-      threadWebRTCStatReport.audioDecoderLossAvg = threadWebRTCStatReport.audioDecoderLossTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.audioPacketsReceivedAvg = threadWebRTCStatReport.audioPacketsReceivedTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.audioPacketsReceivedFractionLossAvg = threadWebRTCStatReport.audioPacketsReceivedFractionLossTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.audioSpeakerDelayMsAvg = threadWebRTCStatReport.audioSpeakerDelayMsTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.availableReceiveBandwidthAvg = threadWebRTCStatReport.availableReceiveBandwidthTotal / totalReadingsByWorkerThread;
-      //threadWebRTCStatReport.availableSendBandwidthAvg = threadWebRTCStatReport.availableSendBandwidthTotal / totalReadingsByWorkerThread;
-    } else {
-      console.log(workerData.threadId + 'threadReadings is 0 0000000 ');
-    }
-  }
-
-  writeMetric(metricReport, webRTCStatReport) {
-
-    let metricsStr = '[';
-    const workerDataThreadId = workerData.threadId;
-    const webRTCStatReportWorkerThread = webRTCStatReport[workerDataThreadId];
-
-    if (typeof (metricReport.audioDecoderLoss) !== 'undefined') {
-      const metricReportAudioDecoderLoss = metricReport.audioDecoderLoss;
-      metricsStr += 'audioDecoderLoss: ' + metricReportAudioDecoderLoss + '; ';
-      webRTCStatReportWorkerThread.audioDecoderLossTotal += metricReportAudioDecoderLoss;
-
-      webRTCStatReportWorkerThread.audioDecoderLossMinMax[0] = !webRTCStatReportWorkerThread.audioDecoderLossMinMax[0] ? metricReportAudioDecoderLoss : Math.min(webRTCStatReportWorkerThread.audioDecoderLossMinMax[0], metricReportAudioDecoderLoss);
-      webRTCStatReportWorkerThread.audioDecoderLossMinMax[1] = !webRTCStatReportWorkerThread.audioDecoderLossMinMax[1] ? metricReportAudioDecoderLoss : Math.max(webRTCStatReportWorkerThread.audioDecoderLossMinMax[1], metricReportAudioDecoderLoss);
-    }
-
-    if (typeof (metricReport.audioPacketsReceived) !== 'undefined') {
-      const metricReportAudioPacketsReceived = metricReport.audioPacketsReceived;
-      metricsStr += 'audioPacketsReceived: ' + metricReportAudioPacketsReceived + '; ';
-      webRTCStatReportWorkerThread.audioPacketsReceivedTotal += metricReportAudioPacketsReceived;
-
-      webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0] = !webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0] ? metricReportAudioPacketsReceived : Math.min(webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0], metricReportAudioPacketsReceived);
-      webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1] = !webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1] ? metricReportAudioPacketsReceived : Math.max(webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1], metricReportAudioPacketsReceived);
-
-    }
-    if (typeof (metricReport.audioPacketsReceivedFractionLoss) !== 'undefined') {
-      const metricReportAudioPacketsReceivedFractionLoss = metricReport.audioPacketsReceivedFractionLoss;
-      metricsStr += 'audioPacketsReceivedFractionLoss: ' + metricReportAudioPacketsReceivedFractionLoss + '; ';
-      webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossTotal += metricReportAudioPacketsReceivedFractionLoss;
-
-      webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0] = !webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0] ? metricReportAudioPacketsReceivedFractionLoss : Math.min(webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0], metricReportAudioPacketsReceivedFractionLoss);
-      webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1] = !webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1] ? metricReportAudioPacketsReceivedFractionLoss : Math.max(webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1], metricReportAudioPacketsReceivedFractionLoss);
-    }
-    if (typeof (metricReport.audioSpeakerDelayMs) !== 'undefined') {
-      const metricReportAudioSpeakerDelayMs = metricReport.audioSpeakerDelayMs;
-      metricsStr += 'audioSpeakerDelayMs: ' + metricReportAudioSpeakerDelayMs + '; ';
-      webRTCStatReportWorkerThread.audioSpeakerDelayMsTotal += metricReportAudioSpeakerDelayMs;
-
-      webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0] = !webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0] ? metricReportAudioSpeakerDelayMs : Math.min(webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0], metricReportAudioSpeakerDelayMs);
-      webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1] = !webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1] ? metricReportAudioSpeakerDelayMs : Math.max(webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1], metricReportAudioSpeakerDelayMs);
-    }
-    if (typeof (metricReport.availableReceiveBandwidth) !== 'undefined') {
-      const metricReportAvailableReceiveBandwidth = metricReport.availableReceiveBandwidth;
-      metricsStr += 'availableReceiveBandwidth: ' + metricReportAvailableReceiveBandwidth + '; ';
-      webRTCStatReportWorkerThread.availableReceiveBandwidthTotal += metricReportAvailableReceiveBandwidth;
-
-      webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0] = !webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0] ? metricReportAvailableReceiveBandwidth : Math.min(webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0], metricReportAvailableReceiveBandwidth);
-      webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1] = !webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1] ? metricReportAvailableReceiveBandwidth : Math.max(webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1], metricReportAvailableReceiveBandwidth);
-    }
-
-    metricsStr += ']';
-    if (metricsStr.length > 3) {
-      webRTCStatReportWorkerThread.totalReadings += 1;
-    }
-    return metricsStr;
-
-  }
-}
-
-
-new MeetingLauncher();
-
-
-//
-//
-// const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
-// if (isMainThread) {
-//   // This code is executed in the main thread and not in the worker.
-//   const threadCount = process.argv[2] || 2;
-//   const threads = new Set();
-//
-//   //for fixed size array
-//   const meetingAttendeeList = [-1];
-//   for (threadId = 0; threadId<6000; threadId++)
-//     meetingAttendeeList.push(threadId);
-//
-//   max = meetingAttendeeList.length;
-//   min = 0;
-//
-//   console.log(`Running with ${threadCount} threads...`);
-//   const range = Math.ceil((max - min) / threadCount);
-//   let start = min;
-//   for (let threadId = 0; threadId < threadCount - 1; threadId++) {
-//     const startIndex = start;
-//     threads.add(new Worker(__filename, { workerData: { start: startIndex, range }}));
-//     start += range;
-//   }
-//
-//
-//   threads.add(new Worker(__filename, { workerData: { start, range: range + ((max - min + 1) % threadCount)}}));
-//   for (let worker of threads) {
-//     worker.on('error', (err) => { });
-//     worker.on('exit', () => {
-//       threads.delete(worker);
-//       console.log(`Thread exiting, ${threads.size} running...`);
-//       if (threads.size === 0) {
-//         console.log('Threads ended');
-//       }
-//     })
-//     worker.on('message', (msg) => {
-//       //primes = primes.concat(msg);
-//       console.log(msg);
-//     });
-//   }
-// } else {
-//   // This code is executed in the worker and not in the main thread.
-//   //generatePrimes(workerData.start, workerData.range);
-//
-//   console.log(workerData.start + ' ' + workerData.range);
-//   // Send a message to the main thread.
-//   parentPort.postMessage('Hello world!');
-//
-// }
-
-
-
-
-
-
-
-import {createRequire} from "module";
-import sqsOperations from './sqsOperations.js';
-
-const require = createRequire(import.meta.url);
-const puppeteer = require('puppeteer');
-const {exec} = require('child_process');
-
-var fs = require('fs');
-
-const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
-
-
-const {EventEmitter} = require('events');
-
-class WebRTCStatReport {
-  constructor() {
-    this.audioDecoderLossTotal = 0;
-    this.audioPacketsReceivedTotal = 0;
-    this.audioPacketsReceivedFractionLossTotal = 0;
-    this.audioSpeakerDelayMsTotal = 0;
-    this.availableReceiveBandwidthTotal = 0;
-    // this.availableSendBandwidthTotal = 0;
-    this.totalReadings = 0;
-
-    this.audioDecoderLossMinMax = [];
-    this.audioPacketsReceivedMinMax = [];
-    this.audioPacketsReceivedFractionLossMinMax = [];
-    this.audioSpeakerDelayMsMinMax = [];
-    this.availableReceiveBandwidthMinMax = [];
-    //this.availableSendBandwidthMinMax = [0,0];
-
-    this.audioDecoderLossAvg = 0;
-    this.audioPacketsReceivedAvg = 0;
-    this.audioPacketsReceivedFractionLossAvg = 0;
-    this.audioSpeakerDelayMsAvg = 0;
-    this.availableReceiveBandwidthAvg = 0;
-    //this.availableSendBandwidthAvg = 0;
-  }
-}
-
 
 class MeetingLauncher {
   static MIN_ACTIVE_TIME_MS = 20000;   //1200000
-  //const MIN_ACTIVE_TIME_MS = 193071;   //1200000
   static MAX_ACTIVE_TIME_MS = 20500;   //1300000
+  static METRIC_GRAB_FREQUENCY = 1000;
+  static FILE_NAME = "./thread_launcher.js"
+  static NO_ATTENDEES_PER_MEETING = 10;
+  triggerClearInterval = new Map();
+  leave = new Map();
+  realTimeMetricAggregate = false;
 
   constructor() {
-    this.browserThreadMap = [];
     this.run();
     this.done = 0;
-
   }
 
   getRndDuration() {
     return Math.floor(Math.random() * (MeetingLauncher.MAX_ACTIVE_TIME_MS - MeetingLauncher.MIN_ACTIVE_TIME_MS + 1)) + MeetingLauncher.MIN_ACTIVE_TIME_MS;
   }
 
-
   async done() {
     try {
-      console.log('Done ' + done);
-      this.done = done + 1;
+      console.log('Done ');
     } catch (error) {
       console.log(error);
     }
   }
 
-  createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList) {
-    return (new Worker('./threads_launcher.js', {
+  createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList) {
+    return (new Worker(MeetingLauncher.FILE_NAME, {
       workerData: {
         start: startIndex,
         range: range,
         threadId: threadId,
-        sessionTimeStamp: sessionTimeStamp,
+        meetingsDirectory: meetingsDirectory,
         meetingAttendeeList: meetingAttendeeList
       }
     }));
   }
 
   cleanup() {
-
     exec(`ps -aux | grep 'puppeteer' | xargs kill -9`);
-    exec(`ps -aux | grep 'chrome' | xargs kill -9`)
-    // const whoami = exec("whoami", { encoding: 'utf-8' });
-    // console.log(whoami);
-    // change the username to ec2user and add somne delay
-    // prefer to use `ps -aux | grep 'puppeteer' | xargs kill -9`
-    // const killCommand = "pgrep -U ridip|xargs kill -9";
-    // console.log(killCommand);
-    // exec(killCommand);
+    exec(`ps -aux | grep 'node' | xargs kill -9`);
+    exec(`cd node_module`);
+    exec(`rm -rf puppeteer`);
   }
 
-  spawnThreads(meetingAttendeeList, threadCount, threads, sessionTimeStamp) {
+  spawnThreads(meetingAttendeeList, threadCount, threads, meetingsDirectory) {
     const max = meetingAttendeeList.length;
-    console.log(meetingAttendeeList);
-    console.log(max);
     const min = 0;
     console.log(`Running with ${threadCount} threads...`);
-
     let start = min;
 
     if (max % threadCount === 0) {
       const range = (max / threadCount);
       for (let threadId = 0; threadId < threadCount; threadId++) {
         const startIndex = start;
-        console.log(startIndex + ' ' + range + ' ' + threadId, sessionTimeStamp);
-        threads.add(this.createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList));
-        this.browserThreadMap.push(0);
+        console.log(startIndex + ' ' + range + ' ' + threadId, meetingsDirectory);
+        threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
         start += range;
       }
     } else {
@@ -719,24 +96,19 @@ class MeetingLauncher {
         range = Math.floor(max / threadCount);
       else
         range = Math.ceil(max / threadCount);
-
-      console.log(range);
       let remainingDataCount = max - range * threadCount;
-      console.log(remainingDataCount);
-
       for (let threadId = 0; threadId < threadCount && threadId <= max; threadId++) {
         const startIndex = start;
         if (remainingDataCount > 0) {
-          console.log(startIndex + ' ' + (range + 1) + ' ' + threadId, sessionTimeStamp);
+          console.log(startIndex + ' ' + (range + 1) + ' ' + threadId, meetingsDirectory);
           remainingDataCount -= 1;
-          threads.add(this.createWorkerThread(startIndex, range + 1, threadId, sessionTimeStamp, meetingAttendeeList));
+          threads.add(this.createWorkerThread(startIndex, range + 1, threadId, meetingsDirectory, meetingAttendeeList));
           start += range + 1;
         } else {
-          console.log(startIndex + ' ' + (range) + ' ' + threadId, sessionTimeStamp);
-          threads.add(this.createWorkerThread(startIndex, range, threadId, sessionTimeStamp, meetingAttendeeList));
+          console.log(startIndex + ' ' + (range) + ' ' + threadId, meetingsDirectory);
+          threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
           start += range;
         }
-        this.browserThreadMap.push(0);
       }
     }
   }
@@ -744,321 +116,289 @@ class MeetingLauncher {
   async run() {
     if (isMainThread) {
       const sessionTimeStamp = new Date().toISOString();
-
-      // This code is executed in the main thread and not in the worker.
       const threadCount = process.argv[2] || 2;
       const noOfMeetings = process.argv[3] || 10;
       const threads = new Set();
-      const meetingAttendeeList = new SharedArrayBuffer();
+      let meetingAttendeeList = new SharedArrayBuffer();
+      const meetingAttendeeArray = new Array();
+      let meetingAttendeeListIndex = 0;
+      const sqs = new SQSOperations();
 
-      const sqs = new sqsOperations();
-
-      //for fixed size array
-      for (let j = 0; j < noOfMeetings; j++) {
+      //for (let meeting = 0; meeting < noOfMeetings; meeting++) {
+      while (meetingAttendeeArray.length < noOfMeetings * MeetingLauncher.NO_ATTENDEES_PER_MEETING) {
+        console.log('ttertwt ', meetingAttendeeArray.length);
         try {
-          const meetingAttendeeInfo = await sqs.getCreateMeetingWithAttendeesBodyFromSQS();
-          console.log(meetingAttendeeInfo.Meeting)
-          console.log(meetingAttendeeInfo.Attendees)
-
-          if(meetingAttendeeInfo.Meeting && meetingAttendeeInfo.Attendees) {
-            const meetingInfo = meetingAttendeeInfo.Meeting;
-            const attendeeInfo = meetingAttendeeInfo.Attendees;
-            for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
-              meetingAttendeeList[0] = {Meeting: meetingInfo, Attendees:attendeeInfo[attendee]};
-              //console.log('-------Arrr ',meetingAttendeeList[0])
-
-            }
+          const createMeetingWithAttendeesResponses = await sqs.getCreateMeetingWithAttendeesBodyFromSQS();
+          for (let response = 0; response < Math.min(noOfMeetings, createMeetingWithAttendeesResponses.Messages.length); response += 1) {
+            const meetingAttendeeInfo = JSON.parse(createMeetingWithAttendeesResponses.Messages[response].Body);
+            if (meetingAttendeeInfo && meetingAttendeeInfo.Meeting && meetingAttendeeInfo.Attendees) {
+              const meetingInfo = meetingAttendeeInfo.Meeting;
+              const attendeeInfo = meetingAttendeeInfo.Attendees;
+              for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
+                meetingAttendeeArray[meetingAttendeeListIndex] = {
+                  Meeting: meetingInfo,
+                  Attendees: attendeeInfo[attendee]
+                };
+                meetingAttendeeListIndex += 1;
+              }
+            } else
+              this.log('Empty SQS');
           }
-      else
-          console.log('Failed to read from SQS 0000 ')
         } catch (err) {
-          console.log('Failed to read from SQS ', err.message)
+          this.error('Failed SQS retrieval', err.message)
         }
-
+        this.log(meetingAttendeeArray.length, ' meetingAttendeeArray ', meetingAttendeeArray);
       }
-      console.log('-------len ',meetingAttendeeList.length)
+      if (meetingAttendeeArray.length > 0) {
+        this.log('meetingAttendeeArrayLength ' + meetingAttendeeArray.length);
+        let meetingsDirectory = 'Readings/MeetingsDirectory_' + sessionTimeStamp;
 
-      if (meetingAttendeeList.length > 0) {
-        for (let i = 0; i<meetingAttendeeList.length; i++){
-          console.log('-------Arrr ',meetingAttendeeList[i])
-        }
-        this.spawnThreads(meetingAttendeeList, threadCount, threads, sessionTimeStamp);
-      }
-
-      let rtcStatReport = new WebRTCStatReport();
-
-      for (let worker of threads) {
-        worker.postMessage({meetingAttendeeList})
-        worker.on('error', (err) => {
-          console.error(err)
-        });
-
-        worker.on('exit', () => {
-          threads.delete(worker);
-          console.log(`Thread exiting, ${threads.size} running...`);
-          if (threads.size === 0) {
-            console.log('Threads ended');
-            // const totalReadings = rtcStatReport.totalReadings;
-            // console.log('totalReadings: ' + totalReadings);
-            // console.log('audioDecoderLoss Avg: ' + rtcStatReport.audioDecoderLossAvg / threadCount);
-            // console.log('audioPacketsReceived Avg: ' + rtcStatReport.audioPacketsReceivedAvg / threadCount);
-            // console.log('audioPacketsReceivedFractionLoss Avg: ' + rtcStatReport.audioPacketsReceivedFractionLossAvg / threadCount);
-            // console.log('audioSpeakerDelayMs Avg: ' + rtcStatReport.audioSpeakerDelayMsAvg / threadCount);
-            // console.log('availableReceiveBandwidth Avg: ' + rtcStatReport.availableReceiveBandwidthAvg / threadCount);
-            // //console.log('availableSendBandwidth Avg: ' + rtcStatReport.availableSendBandwidthAvg / threadCount);
-            //
-            // console.log('totalReadings: ' + totalReadings);
-            // console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
-            // console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
-            // console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
-            // console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
-            //console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
-            //console.log('availableSendBandwidth MinMax: ' + rtcStatReport.availableSendBandwidthMinMax);
-            this.cleanup()
+        try {
+          if (!fs.existsSync(meetingsDirectory)) {
+            fs.mkdirSync(meetingsDirectory, {recursive: true})
           }
-        });
+        } catch (err) {
+          console.error(err)
+        }
+        this.spawnThreads(meetingAttendeeArray, threadCount, threads, meetingsDirectory);
+        let rtcStatReport = new WebRTCStatReport();
+        for (let worker of threads) {
+          worker.on('error', (err) => {
+            console.error(err)
+          });
 
-        worker.on('message', async (message) => {
-          const threadStatReport = message.webRTCStatReport;
-          console.log('threadStatReport ----  ');
-          console.log(message);
-          const threadId = message.threadId;
-          // rtcStatReport.audioDecoderLossAvg += threadStatReport.audioDecoderLossAvg;
-          // rtcStatReport.audioPacketsReceivedAvg += threadStatReport.audioPacketsReceivedAvg;
-          // rtcStatReport.audioPacketsReceivedFractionLossAvg += threadStatReport.audioPacketsReceivedFractionLossAvg;
-          // rtcStatReport.audioSpeakerDelayMsAvg += threadStatReport.audioSpeakerDelayMsAvg;
-          // rtcStatReport.availableReceiveBandwidthAvg += threadStatReport.availableReceiveBandwidthAvg;
-          // //rtcStatReport.availableSendBandwidthAvg += threadStatReport.availableSendBandwidthAvg;
-          // rtcStatReport.totalReadings += threadStatReport.totalReadings;
-          //
-          //
-          // console.log('audioDecoderLoss MinMax: ' + threadStatReport.audioDecoderLossMinMax);
-          // console.log('audioPacketsReceived MinMax: ' + threadStatReport.audioPacketsReceivedMinMax);
-          // console.log('audioPacketsReceivedFractionLoss MinMax: ' + threadStatReport.audioPacketsReceivedFractionLossMinMax);
-          // console.log('audioSpeakerDelayMs MinMax: ' + threadStatReport.audioSpeakerDelayMsMinMax);
-          // console.log('availableReceiveBandwidth MinMax: ' + threadStatReport.availableReceiveBandwidthMinMax);
-          // //console.log('availableSendBandwidth MinMax: ' + threadStatReport.availableSendBandwidthMinMax);
-          //
-          // console.log(' -------- - - - --------------------- - - - ---------------------');
-          // console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
-          // console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
-          // console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
-          // console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
-          // console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
-          // //console.log('availableSendBandwidth MinMax: ' + rtcStatReport.availableSendBandwidthMinMax);
-          //
-          //
-          // rtcStatReport.audioDecoderLossMinMax[0] = !rtcStatReport.audioDecoderLossMinMax[0] ? threadStatReport.audioDecoderLossMinMax[0] : Math.min(rtcStatReport.audioDecoderLossMinMax[0], threadStatReport.audioDecoderLossMinMax[0]);
-          // rtcStatReport.audioDecoderLossMinMax[1] = !rtcStatReport.audioDecoderLossMinMax[1] ? threadStatReport.audioDecoderLossMinMax[1] : Math.max(rtcStatReport.audioDecoderLossMinMax[1], threadStatReport.audioDecoderLossMinMax[1]);
-          //
-          // rtcStatReport.audioPacketsReceivedMinMax[0] = !rtcStatReport.audioPacketsReceivedMinMax[0] ? threadStatReport.audioPacketsReceivedMinMax[0] : Math.min(rtcStatReport.audioPacketsReceivedMinMax[0], threadStatReport.audioPacketsReceivedMinMax[0]);
-          // rtcStatReport.audioPacketsReceivedMinMax[1] = !rtcStatReport.audioPacketsReceivedMinMax[1] ? threadStatReport.audioPacketsReceivedMinMax[1] : Math.max(rtcStatReport.audioPacketsReceivedMinMax[1], threadStatReport.audioPacketsReceivedMinMax[1]);
-          //
-          // rtcStatReport.audioPacketsReceivedFractionLossMinMax[0] = !rtcStatReport.audioPacketsReceivedFractionLossMinMax[0] ? threadStatReport.audioPacketsReceivedFractionLossMinMax[0] : Math.min(rtcStatReport.audioPacketsReceivedFractionLossMinMax[0], threadStatReport.audioPacketsReceivedFractionLossMinMax[0]);
-          // rtcStatReport.audioPacketsReceivedFractionLossMinMax[1] = !rtcStatReport.audioPacketsReceivedFractionLossMinMax[1] ? threadStatReport.audioPacketsReceivedFractionLossMinMax[1] : Math.max(rtcStatReport.audioPacketsReceivedFractionLossMinMax[1], threadStatReport.audioPacketsReceivedFractionLossMinMax[1]);
-          //
-          // rtcStatReport.audioSpeakerDelayMsMinMax[0] = !rtcStatReport.audioSpeakerDelayMsMinMax[0] ? threadStatReport.audioSpeakerDelayMsMinMax[0] : Math.min(rtcStatReport.audioSpeakerDelayMsMinMax[0], threadStatReport.audioSpeakerDelayMsMinMax[0]);
-          // rtcStatReport.audioSpeakerDelayMsMinMax[1] = !rtcStatReport.audioSpeakerDelayMsMinMax[1] ? threadStatReport.audioSpeakerDelayMsMinMax[1] : Math.max(rtcStatReport.audioSpeakerDelayMsMinMax[1], threadStatReport.audioSpeakerDelayMsMinMax[1]);
-          //
-          // rtcStatReport.availableReceiveBandwidthMinMax[0] = !rtcStatReport.availableReceiveBandwidthMinMax[0] ? threadStatReport.availableReceiveBandwidthMinMax[0] : Math.min(rtcStatReport.availableReceiveBandwidthMinMax[0], threadStatReport.availableReceiveBandwidthMinMax[0]);
-          // rtcStatReport.availableReceiveBandwidthMinMax[1] = !rtcStatReport.availableReceiveBandwidthMinMax[1] ? threadStatReport.availableReceiveBandwidthMinMax[1] : Math.max(rtcStatReport.availableReceiveBandwidthMinMax[1], threadStatReport.availableReceiveBandwidthMinMax[1]);
+          worker.on('exit', () => {
+            threads.delete(worker);
+            console.log(`Thread exiting, ${threads.size} running...`);
+            if (threads.size === 0) {
+              console.log('Threads ended');
+              this.printRTCStatReport(rtcStatReport, threadCount, this.realTimeMetricAggregate);
+              meetingAttendeeList = [];
+              this.cleanup()
+            }
+          });
 
-          // console.log(' --------  - - - --------------------- - - - ---------------------');
-          // console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
-          // console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
-          // console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
-          // console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
-          // console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
-
-        });
+          worker.on('message', async (message) => {
+            const threadStatReport = message.webRTCStatReport;
+            console.log('threadStatReport ----  ');
+            const threadId = message.threadId;
+            this.aggregationOperation(rtcStatReport, threadCount, this.realTimeMetricAggregate);
+          });
+        }
       }
     } else {
       this.childThreadActivity();
     }
   }
 
+  log(str, tabNo = '') {
+    if (isMainThread) {
+      console.log('[Master Thread Error] ' + str);
+    } else {
+      console.log(workerData.threadId + '  ' + tabNo + ' [ChildThread] ' + str);
+    }
+  }
+
+  error(str, tabNo = '') {
+    if (isMainThread) {
+      console.log('[Master Thread Error] ' + str);
+    } else {
+      console.log(workerData.threadId + '  ' + tabNo + ' [Child Thread Error] ' + str);
+    }
+  }
+
   async childThreadActivity() {
     const browser = {};
-    const tabRandomDuration = new Map();
-    const reportFetch = new Map();
-    const triggerClearInterval = new Map();
     const webRTCStatReport = {};
-
+    const reportFetch = new Map();
     const page = [];
-    const meetingId = Math.random();
-
-    workerData.on('message', function (data) {
-      console.log(data);
-    })
 
     browser[workerData.threadId] = await puppeteer.launch({
       headless: false,
       args: [
         '--no-sandbox', '--disable-setuid-sandbox',
         '--use-fake-ui-for-media-stream',
+        '--disable-dev-shm-usage',
         '--use-fake-device-for-media-stream',
         '--hostname localhost',
         '--no-sandbox', '--disable-setuid-sandbox',
         '--single-process', '--no-zygote'
       ],
+    }).catch((er) => {
+      this.error('Browser launch failed', er)
     });
 
-    this.browserThreadMap[workerData.threadId] = browser;
     webRTCStatReport[workerData.threadId] = new WebRTCStatReport();
-    const sqs = new sqsOperations();
-    try {
+    const sqs = new SQSOperations();
+    let fileLocation = new Map();
+    let dataToWriteToFile = new Map();
+    let meetingsDirectory = workerData.meetingsDirectory;
 
-      // .then(function (result) {
-      //   if (result) {
-      //     console.log("---->", result) // "Some User token"
-      //
-      //   }
-      // })
-      if (joinInfo.Meeting) {
+    fs.access(meetingsDirectory, fs.F_OK, (err) => {
+      if (err) {
+        fs.mkdirSync(meetingsDirectory, {recursive: true});
+      } else {
+        if (err) throw err;
+      }
+    });
 
-      console.log("----> 00000", joinInfo);
-      console.log("----> 11111", joinInfo.Meeting);
-    }
-      if (joinInfo.Attendees)
-        console.log("----> 22222", joinInfo.Attendees);
-
+    if (browser[workerData.threadId]) {
       for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-        var joinInfo = workerData.meetingAttendeeInfo[browserTab];
-        if (joinInfo.Meeting && joinInfo.Attendees) {
+        let meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
+        let attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
+
+        if (browser[workerData.threadId] && meetingInfo && attendeeInfo) {
           page[browserTab] = await browser[workerData.threadId].newPage();
           page[browserTab].on('error', err => {
-            console.log('error occured: ', err);
-          });
-          page[browserTab].on('page error', pageerr => {
-            console.log('page error occurred: ', pageerr);
+            this.error('Error occured: ' + err, browserTab);
           });
 
-         const response = await page[browserTab].goto('http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(joinInfo.Meeting)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(joinInfo.Attendees[0]))+'').catch(() => {
-          //const response = await page[browserTab].goto('http://127.0.0.1:8080/meetingInfo=hjhkj&attendeeInfo=hj', { method:"POST", data: reformatFirstRequest }).catch(() => {
-            console.log('Failed to load localhost')
+          const response = await page[browserTab].goto('http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo))).catch((ex) => {
+            this.error('Failed to load  ', ex)
+            page[browserTab] = null;
+          }).then(() => {
+            this.log('Opened localhost.... ', browserTab)
           });
+          const meetingId = meetingInfo.MeetingId;
+          fileLocation[meetingId] = meetingsDirectory + '/' + meetingId;
 
-          console.log(JSON.stringify(joinInfo.Attendees))
-
-          // console.log({
-          //   url: response.url(),
-          //   statusCode: response.status(),
-          //   method: response.request().method(),
-          //   body: await response.text()
-          // });
+          try {
+            if (fs.existsSync(fileLocation[meetingId])) {
+              this.log('file exists');
+            } else {
+              dataToWriteToFile[meetingId] = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId\n'
+              fs.writeFile(fileLocation[meetingId] + '.csv', dataToWriteToFile[meetingId], function (err) {
+                if (err) {
+                  console.log('Failed to write due to ' + err.message + dataToWriteToFile[meetingId]);
+                }
+                console.log(meetingId, ' Saved!' + dataToWriteToFile[meetingId]);
+              })
+            }
+          } catch (err) {
+            this.error('File write: ' + err)
+          }
         }
       }
-    } catch (ex) {
-      console.log(ex.message)
-    }
-    /*
-    const now = Date.now();
-    let meetingsDirectory = 'MeetingsDirectory_' + workerData.sessionTimeStamp;
-    fs.existsSync(meetingsDirectory) || fs.mkdirSync(meetingsDirectory);
 
-    const fileLocation = meetingsDirectory + '/' + meetingId;
-    const dataToWriteToFile = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId,timestamp\n'
-    fs.appendFile(fileLocation + '.csv', dataToWriteToFile, function (err) {
-      if (err) {
-        console.log('Failed to write due to ' , err.message + dataToWriteToFile);
-      }
-      console.log('Saved!' + dataToWriteToFile);
-    });
+      const now = Date.now();
+      for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
+        const meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
+        const attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
+        const meetingId = meetingInfo.ExternalMeetingId || meetingInfo.MeetingId;
+        const attendeeId = attendeeInfo.ExternalUserId || attendeeInfo.MeetingId;
+        this.triggerClearInterval[browserTab] = false;
+        this.leave[browserTab] = false;
 
-    for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-      const attendeeId = Math.random();
-      triggerClearInterval[browserTab] = false;
-      if (!tabRandomDuration.has(browserTab)) {
-        tabRandomDuration[browserTab] = this.getRndDuration();
-      }
-      try {
-        await page[browserTab].evaluate((attendee, meetingId, browserTab) => {
-          document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendee;
-          document.getElementById('authenticate').click();
-        }, attendeeId, meetingId, browserTab);
-      } catch (e) {
-        console.log('an expection on page.evaluate ', e);
-      }
-      await new Promise(resolve => setTimeout(resolve, 750));
-
-      reportFetch[browserTab] = setInterval(async () => {
         try {
-          //console.log(workerData.threadId, 'triggerClearInterval ', triggerClearInterval);
+          if (page[browserTab] !== null) {
 
-          if (triggerClearInterval[browserTab] === false && browser[workerData.threadId].isConnected()) {
-            const metricReport = await page[browserTab].evaluate(() => {
+            await page[browserTab].evaluate((attendee, meetingId, browserTab) => {
+              document.getElementById('inputMeeting').value = meetingId;
+              document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendee;
+              document.getElementById('authenticate').click();
+            }, attendeeId, meetingId, browserTab);
+            this.log('Starting meeting on tab # ', browserTab);
+          }
+        } catch (ex) {
+          this.error('Exception on page evaluate ' + ex, browserTab);
+        }
+        await this.fetchMetricsFromBrowser(browser, page, reportFetch, meetingInfo, attendeeInfo, fileLocation, browserTab);
+      }
+      await this.setMeetingTimeout(page, reportFetch);
+      this.individualThreadWebRTCAvgReading(webRTCStatReport, this.realTimeMetricAggregate);
 
-              return new Promise((resolve, reject) => {
+      if (browser[workerData.threadId]) {
+        await this.closeBrowser(browser[workerData.threadId]);
+      }
+      if (this.realTimeMetricAggregate) {
+        parentPort.postMessage({
+          threadId: workerData.threadId,
+          webRTCStatReport: webRTCStatReport[workerData.threadId]
+        });
+      } else {
+        parentPort.postMessage({
+          threadId: workerData.threadId
+        });
+      }
+    }
+  }
+
+  async fetchMetricsFromBrowser(browser, page, reportFetch, meetingInfo, attendeeInfo, fileLocation, browserTab) {
+    reportFetch[browserTab] = setInterval(async () => {
+      try {
+        if (this.triggerClearInterval[browserTab] === false && browser[workerData.threadId] && browser[workerData.threadId].isConnected() && page[browserTab]) {
+          const metricReport = await page[browserTab].evaluate(() => {
+            return new Promise((resolve, reject) => {
+              try {
                 if (app) {
                   let metricStatsForTab = app.metricReport;
                   resolve(metricStatsForTab);
                 }
-              });
+              } catch (ex) {
+                this.error(ex, ' App is undefined');
+              }
             });
-
-            if (metricReport) {
-              var now_2 = Date.now();
-              console.log(now_2 - now);
-              console.log(now_2);
-              console.log(now);
-              //const metricsStr = this.writeMetric(metricReport, webRTCStatReport);
-              //console.log(workerData.threadId + '--> ' + browserTab + ' : ' + meetingId + ' : ' + attendeeId + ' : ' + metricsStr);
-              console.log(metricReport)
-              this.writeMetricsToFile(metricReport, attendeeId, fileLocation);
-            }
-          }
-        } catch (err) {
-          console.log(err.message)
-        }
-      }, 1000);
-      console.log('reportFetch[browserTab] ', reportFetch[browserTab]);
-      setTimeout(async () => {
-        triggerClearInterval[browserTab] = true;
-        try {
-          await page[browserTab].evaluate(async () => {
-            document.getElementById('button-meeting-leave').click();
           });
-        } catch (e) {
-          console.log('an expection on page.evaluate ', e);
+          if (metricReport.audioDecoderLoss || metricReport.audioPacketsReceived || metricReport.audioPacketsReceivedFractionLoss || metricReport.audioSpeakerDelayMs || metricReport.availableReceiveBandwidth || metricReport.availableSendBandwidth) {
+            this.writeMetricsToFile(metricReport, attendeeInfo.AttendeeId, fileLocation[meetingInfo.MeetingId]);
+          } else {
+            this.error('Meeting inactive');
+          }
+          //this.writeMetric(metricReport, webRTCStatReport, this.realTimeMetricAggregate);
         }
-        //console.log('clear interval called');
+      } catch (err) {
+        this.error('87878787 ' + err.message)
+      }
+    }, MeetingLauncher.METRIC_GRAB_FREQUENCY);
+  }
 
-        if (triggerClearInterval[browserTab] === true) {
-          console.log(browserTab + ' clear interval called');
+  async setMeetingTimeout(page, reportFetch) {
+    const tabRandomDuration = new Map();
+    for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
+      if (!tabRandomDuration.has(browserTab)) {
+        tabRandomDuration[browserTab] = this.getRndDuration();
+      }
+      setTimeout(async () => {
+        this.log('Attempting to quit meeting, tab # ', browserTab);
+        try {
+          if (page[browserTab]) {
+            await page[browserTab].evaluate(async () => {
+              document.getElementById('button-meeting-leave').click();
+            });
+          }
+        } catch (e) {
+          this.error('an exception on page.evaluate ', e);
+        } finally {
+          this.leave[browserTab] = true;
+          this.triggerClearInterval[browserTab] = true;
           clearInterval(reportFetch[browserTab]);
         }
       }, tabRandomDuration[browserTab]);
     }
-
-    if (browser[workerData.threadId].isConnected()) {
-      await new Promise((resolve) => {
-        console.log(workerData.threadId + ' sleepinggggggg forrrrrrrr', MeetingLauncher.MAX_ACTIVE_TIME_MS, ' browser ', browser);
-        setTimeout(resolve, MeetingLauncher.MAX_ACTIVE_TIME_MS)
-      });
-      console.log('Close browser initiated');
-      await browser[workerData.threadId].close();
-
-      //this.individualThreadWebRTCAvgReading(webRTCStatReport);
-
-    }
-    parentPort.postMessage({threadId: workerData.threadId, webRTCStatReport: webRTCStatReport[workerData.threadId]});
-    */
-
   }
 
+  async closeBrowser(browser, waitFactor = 1.2) {
+    if (browser.isConnected()) {
+      await new Promise((resolve) => {
+        this.log('Sleeping with waitfactor ' + waitFactor + ' for ' + MeetingLauncher.MAX_ACTIVE_TIME_MS * waitFactor);
+        setTimeout(resolve, MeetingLauncher.MAX_ACTIVE_TIME_MS * waitFactor)
+      });
+      for (let value of this.leave.values()) {
+        this.log('value ', value);
+        this.log('value === false ', value === false);
+        if (value === false) {
+          waitFactor = 0.3;
+          await this.closeBrowser(browser, waitFactor);
+        }
+      }
+      this.log('Close browser initiated');
+      await browser.close();
+    } else {
+      return;
+    }
+  }
 
   writeMetricsToFile(webRTCStatReport, attendeeId, fileLocation) {
-    console.log(webRTCStatReport)
-    console.log(fileLocation)
-    var timestamp = new Date().toISOString();
-    // var utcDate = new Date(date.toUTCString());
-    // utcDate.setHours(utcDate.getHours()-7);
-    // var now = new Date(utcDate);
-    // var strNow = now.getUTCFullYear().toString() + "/" +
-    //   (now.getUTCMonth() + 1).toString() +
-    //   "/" + now.getUTCDate() + " " + now.getUTCHours() +
-    //   ":" + now.getUTCMinutes() + ":" + now.getUTCSeconds();
-
     let dataToWrite = '';
     if (typeof (webRTCStatReport.audioPacketsReceived) !== 'undefined') {
       dataToWrite += webRTCStatReport.audioPacketsReceived + ',';
@@ -1076,148 +416,158 @@ class MeetingLauncher {
       dataToWrite += webRTCStatReport.availableSendBandwidth + ',';
     }
 
-    // fs.mkdir(meetingsDirectory, (err) => {
-    //
-    //   console.log(meetingsDirectory + 'Created');
-    // });
-
     if (dataToWrite !== '') {
-      const dataToWriteToFile = dataToWrite + attendeeId + ',' + timestamp + '\n';
-      fs.appendFile(fileLocation + '.csv', dataToWriteToFile, function (err) {
-        if (err) {
-          console.log('Failed to write due to ', err.message + dataToWriteToFile);
-        }
-        console.log('Saved!' + dataToWriteToFile);
-      });
-    }
-
-  }
-
-
-  individualThreadWebRTCAvgReading(webRTCStatReport) {
-    const threadWebRTCStatReport = webRTCStatReport[workerData.threadId];
-    const totalReadingsByWorkerThread = threadWebRTCStatReport.totalReadings;
-    if (threadWebRTCStatReport.totalReadings > 0) {
-      threadWebRTCStatReport.audioDecoderLossAvg = threadWebRTCStatReport.audioDecoderLossTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.audioPacketsReceivedAvg = threadWebRTCStatReport.audioPacketsReceivedTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.audioPacketsReceivedFractionLossAvg = threadWebRTCStatReport.audioPacketsReceivedFractionLossTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.audioSpeakerDelayMsAvg = threadWebRTCStatReport.audioSpeakerDelayMsTotal / totalReadingsByWorkerThread;
-      threadWebRTCStatReport.availableReceiveBandwidthAvg = threadWebRTCStatReport.availableReceiveBandwidthTotal / totalReadingsByWorkerThread;
-      //threadWebRTCStatReport.availableSendBandwidthAvg = threadWebRTCStatReport.availableSendBandwidthTotal / totalReadingsByWorkerThread;
-    } else {
-      console.log(workerData.threadId + 'threadReadings is 0 0000000 ');
+      try {
+        const dataToWriteToFile = dataToWrite + attendeeId + '\n';
+        fs.appendFile(fileLocation + '.csv', dataToWriteToFile, function (err) {
+          if (err) {
+            console.log('Failed to write due to ', err.message + dataToWriteToFile);
+          }
+          console.log('Saved!' + dataToWriteToFile);
+        });
+      } catch (err) {
+        console.error(err.message);
+      }
     }
   }
 
-  writeMetric(metricReport, webRTCStatReport) {
-
-    let metricsStr = '[';
-    const workerDataThreadId = workerData.threadId;
-    const webRTCStatReportWorkerThread = webRTCStatReport[workerDataThreadId];
-
-    if (typeof (metricReport.audioDecoderLoss) !== 'undefined') {
-      const metricReportAudioDecoderLoss = metricReport.audioDecoderLoss;
-      metricsStr += 'audioDecoderLoss: ' + metricReportAudioDecoderLoss + '; ';
-      webRTCStatReportWorkerThread.audioDecoderLossTotal += metricReportAudioDecoderLoss;
-
-      webRTCStatReportWorkerThread.audioDecoderLossMinMax[0] = !webRTCStatReportWorkerThread.audioDecoderLossMinMax[0] ? metricReportAudioDecoderLoss : Math.min(webRTCStatReportWorkerThread.audioDecoderLossMinMax[0], metricReportAudioDecoderLoss);
-      webRTCStatReportWorkerThread.audioDecoderLossMinMax[1] = !webRTCStatReportWorkerThread.audioDecoderLossMinMax[1] ? metricReportAudioDecoderLoss : Math.max(webRTCStatReportWorkerThread.audioDecoderLossMinMax[1], metricReportAudioDecoderLoss);
+  individualThreadWebRTCAvgReading(webRTCStatReport, realTimeMetricAggregate = false) {
+    if (realTimeMetricAggregate) {
+      const threadWebRTCStatReport = webRTCStatReport[workerData.threadId];
+      const totalReadingsByWorkerThread = threadWebRTCStatReport.totalReadings;
+      if (threadWebRTCStatReport.totalReadings > 0) {
+        threadWebRTCStatReport.audioDecoderLossAvg = threadWebRTCStatReport.audioDecoderLossTotal / totalReadingsByWorkerThread;
+        threadWebRTCStatReport.audioPacketsReceivedAvg = threadWebRTCStatReport.audioPacketsReceivedTotal / totalReadingsByWorkerThread;
+        threadWebRTCStatReport.audioPacketsReceivedFractionLossAvg = threadWebRTCStatReport.audioPacketsReceivedFractionLossTotal / totalReadingsByWorkerThread;
+        threadWebRTCStatReport.audioSpeakerDelayMsAvg = threadWebRTCStatReport.audioSpeakerDelayMsTotal / totalReadingsByWorkerThread;
+        threadWebRTCStatReport.availableReceiveBandwidthAvg = threadWebRTCStatReport.availableReceiveBandwidthTotal / totalReadingsByWorkerThread;
+      } else {
+        console.log(workerData.threadId + 'threadReadings is 0 0000000 ');
+      }
     }
+  }
 
-    if (typeof (metricReport.audioPacketsReceived) !== 'undefined') {
-      const metricReportAudioPacketsReceived = metricReport.audioPacketsReceived;
-      metricsStr += 'audioPacketsReceived: ' + metricReportAudioPacketsReceived + '; ';
-      webRTCStatReportWorkerThread.audioPacketsReceivedTotal += metricReportAudioPacketsReceived;
+  writeMetric(metricReport, webRTCStatReport, realTimeMetricAggregate = false) {
+    if (realTimeMetricAggregate) {
+      let metricsStr = '[';
+      const workerDataThreadId = workerData.threadId;
+      const webRTCStatReportWorkerThread = webRTCStatReport[workerDataThreadId];
 
-      webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0] = !webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0] ? metricReportAudioPacketsReceived : Math.min(webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0], metricReportAudioPacketsReceived);
-      webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1] = !webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1] ? metricReportAudioPacketsReceived : Math.max(webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1], metricReportAudioPacketsReceived);
+      if (typeof (metricReport.audioDecoderLoss) !== 'undefined') {
+        const metricReportAudioDecoderLoss = metricReport.audioDecoderLoss;
+        metricsStr += 'audioDecoderLoss: ' + metricReportAudioDecoderLoss + '; ';
+        webRTCStatReportWorkerThread.audioDecoderLossTotal += metricReportAudioDecoderLoss;
 
+        webRTCStatReportWorkerThread.audioDecoderLossMinMax[0] = !webRTCStatReportWorkerThread.audioDecoderLossMinMax[0] ? metricReportAudioDecoderLoss : Math.min(webRTCStatReportWorkerThread.audioDecoderLossMinMax[0], metricReportAudioDecoderLoss);
+        webRTCStatReportWorkerThread.audioDecoderLossMinMax[1] = !webRTCStatReportWorkerThread.audioDecoderLossMinMax[1] ? metricReportAudioDecoderLoss : Math.max(webRTCStatReportWorkerThread.audioDecoderLossMinMax[1], metricReportAudioDecoderLoss);
+      }
+
+      if (typeof (metricReport.audioPacketsReceived) !== 'undefined') {
+        const metricReportAudioPacketsReceived = metricReport.audioPacketsReceived;
+        metricsStr += 'audioPacketsReceived: ' + metricReportAudioPacketsReceived + '; ';
+        webRTCStatReportWorkerThread.audioPacketsReceivedTotal += metricReportAudioPacketsReceived;
+
+        webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0] = !webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0] ? metricReportAudioPacketsReceived : Math.min(webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[0], metricReportAudioPacketsReceived);
+        webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1] = !webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1] ? metricReportAudioPacketsReceived : Math.max(webRTCStatReportWorkerThread.audioPacketsReceivedMinMax[1], metricReportAudioPacketsReceived);
+
+      }
+      if (typeof (metricReport.audioPacketsReceivedFractionLoss) !== 'undefined') {
+        const metricReportAudioPacketsReceivedFractionLoss = metricReport.audioPacketsReceivedFractionLoss;
+        metricsStr += 'audioPacketsReceivedFractionLoss: ' + metricReportAudioPacketsReceivedFractionLoss + '; ';
+        webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossTotal += metricReportAudioPacketsReceivedFractionLoss;
+
+        webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0] = !webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0] ? metricReportAudioPacketsReceivedFractionLoss : Math.min(webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0], metricReportAudioPacketsReceivedFractionLoss);
+        webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1] = !webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1] ? metricReportAudioPacketsReceivedFractionLoss : Math.max(webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1], metricReportAudioPacketsReceivedFractionLoss);
+      }
+      if (typeof (metricReport.audioSpeakerDelayMs) !== 'undefined') {
+        const metricReportAudioSpeakerDelayMs = metricReport.audioSpeakerDelayMs;
+        metricsStr += 'audioSpeakerDelayMs: ' + metricReportAudioSpeakerDelayMs + '; ';
+        webRTCStatReportWorkerThread.audioSpeakerDelayMsTotal += metricReportAudioSpeakerDelayMs;
+
+        webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0] = !webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0] ? metricReportAudioSpeakerDelayMs : Math.min(webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0], metricReportAudioSpeakerDelayMs);
+        webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1] = !webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1] ? metricReportAudioSpeakerDelayMs : Math.max(webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1], metricReportAudioSpeakerDelayMs);
+      }
+      if (typeof (metricReport.availableReceiveBandwidth) !== 'undefined') {
+        const metricReportAvailableReceiveBandwidth = metricReport.availableReceiveBandwidth;
+        metricsStr += 'availableReceiveBandwidth: ' + metricReportAvailableReceiveBandwidth + '; ';
+        webRTCStatReportWorkerThread.availableReceiveBandwidthTotal += metricReportAvailableReceiveBandwidth;
+
+        webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0] = !webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0] ? metricReportAvailableReceiveBandwidth : Math.min(webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0], metricReportAvailableReceiveBandwidth);
+        webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1] = !webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1] ? metricReportAvailableReceiveBandwidth : Math.max(webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1], metricReportAvailableReceiveBandwidth);
+      }
+
+      metricsStr += ']';
+      if (metricsStr.length > 3) {
+        webRTCStatReportWorkerThread.totalReadings += 1;
+      }
+      return metricsStr;
     }
-    if (typeof (metricReport.audioPacketsReceivedFractionLoss) !== 'undefined') {
-      const metricReportAudioPacketsReceivedFractionLoss = metricReport.audioPacketsReceivedFractionLoss;
-      metricsStr += 'audioPacketsReceivedFractionLoss: ' + metricReportAudioPacketsReceivedFractionLoss + '; ';
-      webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossTotal += metricReportAudioPacketsReceivedFractionLoss;
+  }
 
-      webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0] = !webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0] ? metricReportAudioPacketsReceivedFractionLoss : Math.min(webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[0], metricReportAudioPacketsReceivedFractionLoss);
-      webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1] = !webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1] ? metricReportAudioPacketsReceivedFractionLoss : Math.max(webRTCStatReportWorkerThread.audioPacketsReceivedFractionLossMinMax[1], metricReportAudioPacketsReceivedFractionLoss);
+  aggregationOperation(rtcStatReport, threadStatReport, realTimeMetricAggregate = false) {
+    if (realTimeMetricAggregate) {
+      rtcStatReport.audioDecoderLossAvg += threadStatReport.audioDecoderLossAvg;
+      rtcStatReport.audioPacketsReceivedAvg += threadStatReport.audioPacketsReceivedAvg;
+      rtcStatReport.audioPacketsReceivedFractionLossAvg += threadStatReport.audioPacketsReceivedFractionLossAvg;
+      rtcStatReport.audioSpeakerDelayMsAvg += threadStatReport.audioSpeakerDelayMsAvg;
+      rtcStatReport.availableReceiveBandwidthAvg += threadStatReport.availableReceiveBandwidthAvg;
+      rtcStatReport.totalReadings += threadStatReport.totalReadings;
+
+      console.log('audioDecoderLoss MinMax: ' + threadStatReport.audioDecoderLossMinMax);
+      console.log('audioPacketsReceived MinMax: ' + threadStatReport.audioPacketsReceivedMinMax);
+      console.log('audioPacketsReceivedFractionLoss MinMax: ' + threadStatReport.audioPacketsReceivedFractionLossMinMax);
+      console.log('audioSpeakerDelayMs MinMax: ' + threadStatReport.audioSpeakerDelayMsMinMax);
+      console.log('availableReceiveBandwidth MinMax: ' + threadStatReport.availableReceiveBandwidthMinMax);
+
+      console.log(' -------- - - - --------------------- - - - ---------------------');
+      console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
+      console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
+      console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
+      console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
+      console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
+
+      rtcStatReport.audioDecoderLossMinMax[0] = !rtcStatReport.audioDecoderLossMinMax[0] ? threadStatReport.audioDecoderLossMinMax[0] : Math.min(rtcStatReport.audioDecoderLossMinMax[0], threadStatReport.audioDecoderLossMinMax[0]);
+      rtcStatReport.audioDecoderLossMinMax[1] = !rtcStatReport.audioDecoderLossMinMax[1] ? threadStatReport.audioDecoderLossMinMax[1] : Math.max(rtcStatReport.audioDecoderLossMinMax[1], threadStatReport.audioDecoderLossMinMax[1]);
+
+      rtcStatReport.audioPacketsReceivedMinMax[0] = !rtcStatReport.audioPacketsReceivedMinMax[0] ? threadStatReport.audioPacketsReceivedMinMax[0] : Math.min(rtcStatReport.audioPacketsReceivedMinMax[0], threadStatReport.audioPacketsReceivedMinMax[0]);
+      rtcStatReport.audioPacketsReceivedMinMax[1] = !rtcStatReport.audioPacketsReceivedMinMax[1] ? threadStatReport.audioPacketsReceivedMinMax[1] : Math.max(rtcStatReport.audioPacketsReceivedMinMax[1], threadStatReport.audioPacketsReceivedMinMax[1]);
+
+      rtcStatReport.audioPacketsReceivedFractionLossMinMax[0] = !rtcStatReport.audioPacketsReceivedFractionLossMinMax[0] ? threadStatReport.audioPacketsReceivedFractionLossMinMax[0] : Math.min(rtcStatReport.audioPacketsReceivedFractionLossMinMax[0], threadStatReport.audioPacketsReceivedFractionLossMinMax[0]);
+      rtcStatReport.audioPacketsReceivedFractionLossMinMax[1] = !rtcStatReport.audioPacketsReceivedFractionLossMinMax[1] ? threadStatReport.audioPacketsReceivedFractionLossMinMax[1] : Math.max(rtcStatReport.audioPacketsReceivedFractionLossMinMax[1], threadStatReport.audioPacketsReceivedFractionLossMinMax[1]);
+
+      rtcStatReport.audioSpeakerDelayMsMinMax[0] = !rtcStatReport.audioSpeakerDelayMsMinMax[0] ? threadStatReport.audioSpeakerDelayMsMinMax[0] : Math.min(rtcStatReport.audioSpeakerDelayMsMinMax[0], threadStatReport.audioSpeakerDelayMsMinMax[0]);
+      rtcStatReport.audioSpeakerDelayMsMinMax[1] = !rtcStatReport.audioSpeakerDelayMsMinMax[1] ? threadStatReport.audioSpeakerDelayMsMinMax[1] : Math.max(rtcStatReport.audioSpeakerDelayMsMinMax[1], threadStatReport.audioSpeakerDelayMsMinMax[1]);
+
+      rtcStatReport.availableReceiveBandwidthMinMax[0] = !rtcStatReport.availableReceiveBandwidthMinMax[0] ? threadStatReport.availableReceiveBandwidthMinMax[0] : Math.min(rtcStatReport.availableReceiveBandwidthMinMax[0], threadStatReport.availableReceiveBandwidthMinMax[0]);
+      rtcStatReport.availableReceiveBandwidthMinMax[1] = !rtcStatReport.availableReceiveBandwidthMinMax[1] ? threadStatReport.availableReceiveBandwidthMinMax[1] : Math.max(rtcStatReport.availableReceiveBandwidthMinMax[1], threadStatReport.availableReceiveBandwidthMinMax[1]);
+
+      console.log(' --------  - - - --------------------- - - - ---------------------');
+      console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
+      console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
+      console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
+      console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
+      console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
     }
-    if (typeof (metricReport.audioSpeakerDelayMs) !== 'undefined') {
-      const metricReportAudioSpeakerDelayMs = metricReport.audioSpeakerDelayMs;
-      metricsStr += 'audioSpeakerDelayMs: ' + metricReportAudioSpeakerDelayMs + '; ';
-      webRTCStatReportWorkerThread.audioSpeakerDelayMsTotal += metricReportAudioSpeakerDelayMs;
+  }
 
-      webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0] = !webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0] ? metricReportAudioSpeakerDelayMs : Math.min(webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[0], metricReportAudioSpeakerDelayMs);
-      webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1] = !webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1] ? metricReportAudioSpeakerDelayMs : Math.max(webRTCStatReportWorkerThread.audioSpeakerDelayMsMinMax[1], metricReportAudioSpeakerDelayMs);
+  printRTCStatReport(rtcStatReport, threadCount, realTimeMetricAggregate = false) {
+    if (realTimeMetricAggregate) {
+      const totalReadings = rtcStatReport.totalReadings;
+      console.log('totalReadings: ' + totalReadings);
+      console.log('audioDecoderLoss Avg: ' + rtcStatReport.audioDecoderLossAvg / threadCount);
+      console.log('audioPacketsReceived Avg: ' + rtcStatReport.audioPacketsReceivedAvg / threadCount);
+      console.log('audioPacketsReceivedFractionLoss Avg: ' + rtcStatReport.audioPacketsReceivedFractionLossAvg / threadCount);
+      console.log('audioSpeakerDelayMs Avg: ' + rtcStatReport.audioSpeakerDelayMsAvg / threadCount);
+      console.log('availableReceiveBandwidth Avg: ' + rtcStatReport.availableReceiveBandwidthAvg / threadCount);
+
+      console.log('totalReadings: ' + totalReadings);
+      console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
+      console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
+      console.log('audioPacketsReceivedFractionLoss MinMax: ' + rtcStatReport.audioPacketsReceivedFractionLossMinMax);
+      console.log('audioSpeakerDelayMs MinMax: ' + rtcStatReport.audioSpeakerDelayMsMinMax);
+      console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
     }
-    if (typeof (metricReport.availableReceiveBandwidth) !== 'undefined') {
-      const metricReportAvailableReceiveBandwidth = metricReport.availableReceiveBandwidth;
-      metricsStr += 'availableReceiveBandwidth: ' + metricReportAvailableReceiveBandwidth + '; ';
-      webRTCStatReportWorkerThread.availableReceiveBandwidthTotal += metricReportAvailableReceiveBandwidth;
-
-      webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0] = !webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0] ? metricReportAvailableReceiveBandwidth : Math.min(webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[0], metricReportAvailableReceiveBandwidth);
-      webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1] = !webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1] ? metricReportAvailableReceiveBandwidth : Math.max(webRTCStatReportWorkerThread.availableReceiveBandwidthMinMax[1], metricReportAvailableReceiveBandwidth);
-    }
-
-    metricsStr += ']';
-    if (metricsStr.length > 3) {
-      webRTCStatReportWorkerThread.totalReadings += 1;
-    }
-    return metricsStr;
-
   }
 }
 
-
 new MeetingLauncher();
-
-
-//
-//
-// const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
-// if (isMainThread) {
-//   // This code is executed in the main thread and not in the worker.
-//   const threadCount = process.argv[2] || 2;
-//   const threads = new Set();
-//
-//   //for fixed size array
-//   const meetingAttendeeList = [-1];
-//   for (threadId = 0; threadId<6000; threadId++)
-//     meetingAttendeeList.push(threadId);
-//
-//   max = meetingAttendeeList.length;
-//   min = 0;
-//
-//   console.log(`Running with ${threadCount} threads...`);
-//   const range = Math.ceil((max - min) / threadCount);
-//   let start = min;
-//   for (let threadId = 0; threadId < threadCount - 1; threadId++) {
-//     const startIndex = start;
-//     threads.add(new Worker(__filename, { workerData: { start: startIndex, range }}));
-//     start += range;
-//   }
-//
-//
-//   threads.add(new Worker(__filename, { workerData: { start, range: range + ((max - min + 1) % threadCount)}}));
-//   for (let worker of threads) {
-//     worker.on('error', (err) => { });
-//     worker.on('exit', () => {
-//       threads.delete(worker);
-//       console.log(`Thread exiting, ${threads.size} running...`);
-//       if (threads.size === 0) {
-//         console.log('Threads ended');
-//       }
-//     })
-//     worker.on('message', (msg) => {
-//       //primes = primes.concat(msg);
-//       console.log(msg);
-//     });
-//   }
-// } else {
-//   // This code is executed in the worker and not in the main thread.
-//   //generatePrimes(workerData.start, workerData.range);
-//
-//   console.log(workerData.start + ' ' + workerData.range);
-//   // Send a message to the main thread.
-//   parentPort.postMessage('Hello world!');
-//
-// }

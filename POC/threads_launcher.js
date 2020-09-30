@@ -288,7 +288,7 @@ class MeetingLauncher {
     const page = [];
 
     browser[workerData.threadId] = await puppeteer.launch({
-      headless: true,
+      headless: false,
       args: [
         '--no-sandbox', '--disable-setuid-sandbox',
         '--use-fake-ui-for-media-stream',
@@ -327,7 +327,8 @@ class MeetingLauncher {
           });
 
           //const response = await page[browserTab].goto('http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
-          const response = await page[browserTab].goto('https://ocj63wl9di.execute-api.us-east-1.amazonaws.com/Prod/v2/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
+          //const response = await page[browserTab].goto('https://ocj63wl9di.execute-api.us-east-1.amazonaws.com/Prod/v2/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
+          const response = await page[browserTab].goto('https://av2yj4j98c.execute-api.us-east-1.amazonaws.com/Prod/v2/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '').catch(() => {
             console.log('Failed to load localhost')
           });
           const meetingId = meetingInfo.MeetingId;
