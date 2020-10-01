@@ -1,5 +1,6 @@
 import {createRequire} from 'module';
 import SQSOperations from './SQSOperations.js';
+
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
 const {exec} = require('child_process');
@@ -30,14 +31,15 @@ class WebRTCStatReport {
 }
 
 class MeetingLauncher {
-  static MIN_ACTIVE_TIME_MS = 20000;   //1200000
-  static MAX_ACTIVE_TIME_MS = 20500;   //1300000
+  static MIN_ACTIVE_TIME_MS = 50000;   //1200000
+  static MAX_ACTIVE_TIME_MS = 50500;   //1300000
   static METRIC_GRAB_FREQUENCY = 1000;
   static FILE_NAME = "./thread_launcher.js"
   static NO_ATTENDEES_PER_MEETING = 10;
   triggerClearInterval = new Map();
   leave = new Map();
   realTimeMetricAggregate = false;
+  closedMeetingMap = new Map(new Map());
 
   constructor() {
     this.run();
@@ -56,8 +58,8 @@ class MeetingLauncher {
     }
   }
 
-  createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList) {
-    return (new Worker(MeetingLauncher.FILE_NAME, {
+  async createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList) {
+    return (await new Worker(MeetingLauncher.FILE_NAME, {
       workerData: {
         start: startIndex,
         range: range,
@@ -86,7 +88,7 @@ class MeetingLauncher {
       for (let threadId = 0; threadId < threadCount; threadId++) {
         const startIndex = start;
         console.log(startIndex + ' ' + range + ' ' + threadId, meetingsDirectory);
-        threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
+        threads.add(await this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
         this.putMetricData("thread_created", 1);
         start += range;
       }
@@ -102,12 +104,12 @@ class MeetingLauncher {
         if (remainingDataCount > 0) {
           console.log(startIndex + ' ' + (range + 1) + ' ' + threadId, meetingsDirectory);
           remainingDataCount -= 1;
-          threads.add(this.createWorkerThread(startIndex, range + 1, threadId, meetingsDirectory, meetingAttendeeList));
+          threads.add(await this.createWorkerThread(startIndex, range + 1, threadId, meetingsDirectory, meetingAttendeeList));
           this.putMetricData("thread_created", 1);
           start += range + 1;
         } else {
           console.log(startIndex + ' ' + (range) + ' ' + threadId, meetingsDirectory);
-          threads.add(this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
+          threads.add(await this.createWorkerThread(startIndex, range, threadId, meetingsDirectory, meetingAttendeeList));
           this.putMetricData("thread_created", 1);
           start += range;
         }
@@ -172,7 +174,8 @@ class MeetingLauncher {
         let rtcStatReport = new WebRTCStatReport();
         for (let worker of threads) {
           worker.on('error', (err) => {
-            console.error(err)
+            console.error(err);
+
           });
 
           worker.on('exit', () => {
@@ -222,7 +225,7 @@ class MeetingLauncher {
     const browser = {};
     const webRTCStatReport = {};
     const reportFetch = new Map();
-    const page = [];
+    const page = {};
 
     browser[workerData.threadId] = await puppeteer.launch({
       headless: false,
@@ -235,14 +238,27 @@ class MeetingLauncher {
         '--no-sandbox', '--disable-setuid-sandbox',
         '--single-process', '--no-zygote'
       ],
-    }).catch((err) => {
-      this.error('Browser launch failed', err)
+    }).catch(async (err) => {
+      this.error('Browser launch failed: ' + err);
+      await this.createWorkerThread(workerData.start, workerData.range, workerData.threadId + 1, workerData.meetingsDirectory, workerData.meetingAttendeeList);
+    });
+
+    browser[workerData.threadId].on('error', async (message) => {
+      console.log('Browser Errored out ');
+    });
+    browser[workerData.threadId].on('close', async (message) => {
+      console.log('Browser Closedddd out ');
+    });
+
+    browser[workerData.threadId].on('disconnect', async (message) => {
+      console.log('Browser Disconnectedddd out ');
     });
 
     webRTCStatReport[workerData.threadId] = new WebRTCStatReport();
     const sqs = new SQSOperations();
     let fileLocation = new Map();
     let dataToWriteToFile = new Map();
+    let mapPageMeetingAttendee = new Map();
     let meetingsDirectory = workerData.meetingsDirectory;
 
     fs.access(meetingsDirectory, fs.F_OK, (err) => {
@@ -257,79 +273,44 @@ class MeetingLauncher {
       for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
         let meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
         let attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
-
-        if (browser[workerData.threadId] && meetingInfo && attendeeInfo) {
-          page[browserTab] = await browser[workerData.threadId].newPage();
-          page[browserTab].on('error', err => {
-            this.error('Error occured: ' + err, browserTab);
-          });
-          const url = 'http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo));
-          const response = await page[browserTab].goto(url).catch((err) => {
-            this.error('Failed to load  ' + err);
-            page[browserTab] = null;
-            this.putMetricData("BrowserTabOpenFail", 1);
-          }).then(() => {
-            this.log('Opened localhost.... ', browserTab);
-            this.putMetricData("BrowserTabOpenSuccess", 1);
-
-          });
-          const meetingId = meetingInfo.MeetingId;
-          if(!fileLocation.has(meetingId)){
-            fileLocation[meetingId] = meetingsDirectory + '/' + meetingId;
-            try {
-              if (fs.existsSync(fileLocation[meetingId])) {
-                this.log('file exists');
-              } else {
-                dataToWriteToFile[meetingId] = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId\n'
-                fs.writeFile(fileLocation[meetingId] + '.csv', dataToWriteToFile[meetingId], function (err) {
-                  if (err) {
-                    console.log('Failed to write due to ' + err.message + dataToWriteToFile[meetingId]);
-                  }
-                  console.log(meetingId, ' Saved!' + dataToWriteToFile[meetingId]);
-                })
+        page[browserTab] = null;
+        mapPageMeetingAttendee[workerData.threadId, browserTab] = {meetingInfo, attendeeInfo};
+        if (browser[workerData.threadId] !== null && meetingInfo && attendeeInfo) {
+          await this.createNewPage(browser, browserTab, page, mapPageMeetingAttendee, workerData.threadId);
+          if (page[browserTab] !== null && browser[workerData.threadId].isConnected()) {
+            await this.openLinkInPage(page[browserTab], meetingInfo, attendeeInfo, browserTab);
+            const meetingId = meetingInfo.MeetingId;
+            if (!fileLocation.has(meetingId)) {
+              fileLocation[meetingId] = meetingsDirectory + '/' + meetingId;
+              try {
+                if (fs.existsSync(fileLocation[meetingId])) {
+                  this.log('file exists');
+                } else {
+                  dataToWriteToFile[meetingId] = 'audioPacketsReceived,audioDecoderLoss,audioPacketsReceivedFractionLoss,audioSpeakerDelayMs,availableSendBandwidth,attendeeId\n'
+                  fs.writeFile(fileLocation[meetingId] + '.csv', dataToWriteToFile[meetingId], function (err) {
+                    if (err) {
+                      console.log('Failed to write due to ' + err.message + dataToWriteToFile[meetingId]);
+                    }
+                    console.log(meetingId, ' Saved!' + dataToWriteToFile[meetingId]);
+                  })
+                }
+              } catch (err) {
+                this.error('File write: ' + err)
               }
-            } catch (err) {
-              this.error('File write: ' + err)
             }
           }
         }
       }
-
       const now = Date.now();
       for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
         const meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
         const attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
-        const meetingId = meetingInfo.MeetingId;
-        const attendeeId = attendeeInfo.AttendeeId;
+
         this.triggerClearInterval[browserTab] = false;
         this.leave[browserTab] = false;
 
-        try {
-          if (page[browserTab] !== null) {
-            const meetingStartStatus = await page[browserTab].evaluate((attendeeId, meetingId, browserTab) => {
-              return new Promise((resolve, reject) => {
-                try {
-                  document.getElementById('inputMeeting').value = meetingId;
-                  document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendeeId;
-                  document.getElementById('authenticate').click();
-                  resolve('Success');
-                } catch (err) {
-                  resolve('Fail');
-                }
-              });
-            }, attendeeId, meetingId, browserTab);
-            if(meetingStartStatus === 'Success') {
-              this.log('Meeting start SUCCESS on tab # ', browserTab);
-              this.putMetricData("MeetingStartSuccess", 1);
-            } else {
-              this.log('Meeting start FAIL on tab # ', browserTab);
-              this.putMetricData("MeetingStartFail", 1);
-            }
-          }
-        } catch (err) {
-          this.error('Exception on page evaluate ' + err, browserTab);
-          this.putMetricData("MeetingStartFailPageEvaluate", 1);
-        }
+        await this.startMeetingSession(page[browserTab], meetingInfo, attendeeInfo, browserTab);
+
         await this.fetchMetricsFromBrowser(browser, page, reportFetch, meetingInfo, attendeeInfo, fileLocation, browserTab);
       }
       await this.setMeetingTimeout(page, reportFetch);
@@ -338,6 +319,11 @@ class MeetingLauncher {
       if (browser[workerData.threadId]) {
         await this.closeBrowser(browser[workerData.threadId]);
       }
+      await this.resurrectClosedMeeting().then(() => {
+        console.log('Meeting Restarted');
+      }).catch(() => {
+        console.log('Meeting failed to restart');
+      });
       if (this.realTimeMetricAggregate) {
         parentPort.postMessage({
           threadId: workerData.threadId,
@@ -351,20 +337,108 @@ class MeetingLauncher {
     }
   }
 
-  async fetchMetricsFromBrowser(browser, page, reportFetch, meetingInfo, attendeeInfo, fileLocation, browserTab) {
-    reportFetch[browserTab] = setInterval(async () => {
+  async openLinkInPage(page, meetingInfo, attendeeInfo, browserTab) {
+    if (page) {
       try {
-        if (this.triggerClearInterval[browserTab] === false && browser[workerData.threadId] && browser[workerData.threadId].isConnected() && page[browserTab]) {
-          const metricReport = await page[browserTab].evaluate(() => {
+        const url = 'http://127.0.0.1:8080/?meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo));
+        const response = await page.goto(url).then(() => {
+          this.log('Opened localhost.... ', browserTab);
+          this.putMetricData("BrowserTabOpenSuccess", 1);
+        });
+      } catch (err) {
+        this.error('Failed to load  ' + err);
+        page = null;
+        this.putMetricData("BrowserTabOpenFail", 1);
+      }
+    }
+  }
+
+  async startMeetingSession(page, meetingInfo, attendeeInfo, browserTab) {
+    if (page) {
+      try {
+        const meetingId = meetingInfo.MeetingId;
+        const attendeeId = attendeeInfo.AttendeeId;
+        if (page !== null) {
+          const meetingStartStatus = await page.evaluate((attendeeId, meetingId, browserTab) => {
             return new Promise((resolve, reject) => {
               try {
-                if (app) {
-                  let metricStatsForTab = app.metricReport;
-                  resolve(metricStatsForTab);
-                }
+                document.getElementById('inputMeeting').value = meetingId;
+                document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendeeId;
+                document.getElementById('authenticate').click();
+                resolve('Success');
               } catch (err) {
-                this.error('App is undefined ' + err);
+                resolve('Fail');
               }
+            });
+          }, attendeeId, meetingId, browserTab);
+          if (meetingStartStatus === 'Success') {
+            this.log('Meeting start SUCCESS on tab # ', browserTab);
+            this.putMetricData("MeetingStartSuccess", 1);
+          } else {
+            this.log('Meeting start FAIL on tab # ', browserTab);
+            this.putMetricData("MeetingStartFail", 1);
+          }
+        }
+      } catch (err) {
+        this.error('Exception on page evaluate ' + err, browserTab);
+        this.putMetricData("MeetingStartFailPageEvaluate", 1);
+      }
+    }
+  }
+
+  async resurrectClosedMeeting(page, meetingInfo, attendeeInfo, browserTab) {
+    if (page) {
+      console.log('restartingggg....');
+      await this.openLinkInPage(page, meetingInfo, attendeeInfo, browserTab);
+      await this.startMeetingSession(page, meetingInfo, attendeeInfo, browserTab);
+    }
+  }
+
+  async createNewPage(browser, browserTab, page, mapPageMeetingAttendee, threadId) {
+    if(workerData.threadId === threadId) {
+      page[browserTab] = await browser[workerData.threadId].newPage().catch(() => {
+        this.error('New page failed to loads ');
+        page[browserTab] = null;
+      });
+
+      page[browserTab].on('error', err => {
+        this.error('Error occured: ' + err, browserTab);
+        page[browserTab] = null;
+      });
+
+      page[browserTab].on('close', async (message) => {
+        this.putMetricData('PageClosed', 1);
+        //page[browserTab] = null;
+        if (page[browserTab] !== null && mapPageMeetingAttendee[workerData.threadId, browserTab] && mapPageMeetingAttendee[workerData.threadId, browserTab].meetingInfo && mapPageMeetingAttendee[workerData.threadId, browserTab].attendeeInfo) {
+          console.log('Attempting to restart...');
+          page[browserTab] = null;
+          await this.createNewPage(browser, browserTab, page, mapPageMeetingAttendee, threadId);
+          await this.resurrectClosedMeeting(page[browserTab], mapPageMeetingAttendee[workerData.threadId, browserTab].meetingInfo, mapPageMeetingAttendee[workerData.threadId, browserTab].attendeeInfo, browserTab).then(() => {
+            console.log('Meeting Restarted');
+          }).catch(() => {
+            console.log('Meeting failed to restart');
+          });
+        }
+        console.log('Page Closedddd');
+      });
+    }
+  }
+
+  async fetchMetricsFromBrowser(browser, page, reportFetch, meetingInfo, attendeeInfo, fileLocation, browserTab) {
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    reportFetch[browserTab] = setInterval(async () => {
+      try {
+        if (this.triggerClearInterval[browserTab] === false && browser[workerData.threadId] && browser[workerData.threadId].isConnected() && page[browserTab] !== null) {
+          const metricReport = await page[browserTab].evaluate(() => {
+            return new Promise((resolve, reject) => {
+              //try {
+              if (app) {
+                let metricStatsForTab = app.metricReport;
+                resolve(metricStatsForTab);
+              }
+              // } catch (err) {
+              //   console.error('App is undefined ' + err);
+              // }
             });
           });
           if (metricReport.audioDecoderLoss || metricReport.audioPacketsReceived || metricReport.audioPacketsReceivedFractionLoss || metricReport.audioSpeakerDelayMs || metricReport.availableReceiveBandwidth || metricReport.availableSendBandwidth) {
@@ -375,7 +449,7 @@ class MeetingLauncher {
           //this.writeMetric(metricReport, webRTCStatReport, this.realTimeMetricAggregate);
         }
       } catch (err) {
-        this.error('87878787 ' + err.message)
+        this.error('Cannot retrieve Metrics from browser meeting ' + err.message)
       }
     }, MeetingLauncher.METRIC_GRAB_FREQUENCY);
   }
@@ -388,20 +462,38 @@ class MeetingLauncher {
       }
       setTimeout(async () => {
         try {
-          if (page[browserTab]) {
-            await page[browserTab].evaluate(async () => {
-              document.getElementById('button-meeting-leave').click();
+          if (page[browserTab] !== null) {
+            this.log('Attempting to quit meeting', browserTab);
+            const closeStatus = await page[browserTab].evaluate(async () => {
+              return new Promise((resolve, reject) => {
+                try {
+                  document.getElementById('button-meeting-leave').click();
+                  resolve('Success');
+                } catch (err) {
+                  resolve('Fail');
+                }
+              });
             });
-            this.log('Attempting to quit meeting, tab # ', browserTab);
-            this.putMetricData("MeetingEndSuccess", 1);
+            console.log('closeStatus ', closeStatus);
+            if (closeStatus === 'Success') {
+              this.log('Tab closed', browserTab);
+              this.putMetricData("MeetingEndSuccess", 1);
+            } else {
+              this.error('Failed to end meeting ');
+              this.putMetricData("MeetingEndFail", 1);
+            }
           }
-        } catch(err) {
+        } catch (err) {
           this.error('Failed to end meeting ' + err);
-          this.putMetricData("MeetingEndFail", 1);
         } finally {
+          clearInterval(reportFetch[browserTab]);
           this.leave[browserTab] = true;
           this.triggerClearInterval[browserTab] = true;
-          clearInterval(reportFetch[browserTab]);
+          if (page[browserTab] !== null) {
+            const pageLocal = page[browserTab];
+            page[browserTab] = null;
+            await pageLocal.close();
+          }
         }
       }, tabRandomDuration[browserTab]);
     }
@@ -422,6 +514,7 @@ class MeetingLauncher {
         }
       }
       this.log('Close browser initiated');
+      await browser.disconnect();
       await browser.close();
       this.putMetricData("BrowserClose", 1);
     } else {
@@ -599,6 +692,7 @@ class MeetingLauncher {
       console.log('availableReceiveBandwidth MinMax: ' + rtcStatReport.availableReceiveBandwidthMinMax);
     }
   }
+
 }
 
 new MeetingLauncher();
