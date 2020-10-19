@@ -15,6 +15,8 @@ python3 -mpip install -y matplotlib
 sudo  pip3 install -y pandas
 
 mkdir ChimeLoadTest .aws
+sudo dnf install -y https://s3.us-east-1.amazonaws.com/amazon-ssm-us-east-1/latest/linux_amd64/amazon-ssm-agent.rpm
+
 
 curl -sL https://rpm.nodesource.com/setup_14.x | sudo bash -
 sudo yum install -y nodejs
