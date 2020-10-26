@@ -10,11 +10,7 @@ const os = require('os');
 const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
 
 class MeetingLauncher {
-  static MIN_ACTIVE_TIME_MS = 1200000;   //1200000
-  static MAX_ACTIVE_TIME_MS = 1200500;   //1300000
-  static METRIC_GRAB_FREQUENCY = 1000;
-  static FILE_NAME = './ClientLauncher.js';
-  static NO_ATTENDEES_PER_MEETING = 10;
+  static FILE_NAME = './t.js';
   meetingSessionActive = new Map();
   fileLocation = new Map();
   loadTestEndSignal = false;
@@ -22,13 +18,20 @@ class MeetingLauncher {
   realTimeMetricAggregate = false;
 
   constructor() {
-    this.setAWSToken();
+    this.validateLauncherParameters();
+    const launcherArgs = require('minimist')(process.argv.slice(2));
+    this.NO_OF_MEETINGS = launcherArgs.meetingCount || this.getNoOfMeetingsBasedOnCoreSize();
+    this.NO_OF_THREADS = launcherArgs.noOfThreads || this.getNoOThreadsBasedOnCoreSize();
+    this.NO_ATTENDEES_PER_MEETING = launcherArgs.attendeesPerMeeting || 10;
+    this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1200000;
+    this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 1230000;
+    this.METRIC_GRAB_FREQUENCY = launcherArgs.metricGrabFrequencyMin * 60 * 1000 || 1000;
     this.run();
     this.done = 0;
   }
 
   getRndDuration() {
-    return Math.floor(Math.random() * (MeetingLauncher.MAX_ACTIVE_TIME_MS - MeetingLauncher.MIN_ACTIVE_TIME_MS + 1)) + MeetingLauncher.MIN_ACTIVE_TIME_MS;
+    return Math.floor(Math.random() * (this.MAX_ACTIVE_TIME_MS - this.MIN_ACTIVE_TIME_MS + 1)) + this.MIN_ACTIVE_TIME_MS;
   }
 
   async done() {
@@ -59,9 +62,6 @@ class MeetingLauncher {
     this.putMetricData('CleanupInitiated', 1);
     exec(`sudo ps -aux | grep 'puppeteer' | xargs kill -9`);
     exec(`sudo ps aux | grep puppeteer | grep -v grep | awk '{print $2}' | xargs kill -9`);
-    //exec(`ps -aux | grep 'node' | xargs kill -9`);
-    //exec(`cd node_module`);
-    //exec(`rm -rf puppeteer`);
   }
 
   async spawnThreads(meetingAttendeeList, threadCount, threads, meetingsDirectory, loadTestStartTimeStampEpoch) {
@@ -76,7 +76,7 @@ class MeetingLauncher {
         const startIndex = start;
         console.log(startIndex + ' ' + range + ' ' + threadId);
         threads.add(await this.createWorkerThread(startIndex, range, threadId, meetingAttendeeList, meetingsDirectory, loadTestStartTimeStampEpoch));
-        this.putMetricData("thread_created", 1);
+        this.putMetricData("ThreadCreated", 1);
         start += range;
       }
     } else {
@@ -86,18 +86,18 @@ class MeetingLauncher {
       else
         range = Math.ceil(max / threadCount);
       let remainingDataCount = max - range * threadCount;
-      for (let threadId = 0; threadId < threadCount && threadId <= max; threadId++) {
+      for (let threadId = 0; threadId < threadCount && threadId < max; threadId++) {
         const startIndex = start;
         if (remainingDataCount > 0) {
           console.log(startIndex + ' ' + (range + 1) + ' ' + threadId);
           remainingDataCount -= 1;
           threads.add(await this.createWorkerThread(startIndex, range + 1, threadId, meetingAttendeeList, meetingsDirectory, loadTestStartTimeStampEpoch));
-          this.putMetricData("thread_created", 1);
+          this.putMetricData("ThreadCreated", 1);
           start += range + 1;
         } else {
           console.log(startIndex + ' ' + (range) + ' ' + threadId);
           threads.add(await this.createWorkerThread(startIndex, range, threadId, meetingAttendeeList, meetingsDirectory, loadTestStartTimeStampEpoch));
-          this.putMetricData("thread_created", 1);
+          this.putMetricData("ThreadCreated", 1);
           start += range;
         }
       }
@@ -130,7 +130,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }
   }
 
-  putMetricData(metricName, metricValue, namespace = "CustomLT1") {
+  putMetricData(metricName, metricValue, namespace = "AlivePing") {
     const cmd = `aws cloudwatch put-metric-data --metric-name ${metricName} --dimensions Instance=\`curl http://169.254.169.254/latest/meta-data/instance-id\`  --namespace ${namespace} --value ${metricValue}`;
     exec(cmd);
   }
@@ -154,9 +154,10 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
   async run() {
     if (isMainThread) {
-      this.putMetricData('LauncherRunning', 700);
-      const threadCount = process.argv[2] || this.getNoOThreadsBasedOnCoreSize();
-      const noOfMeetings = process.argv[3] || this.getNoOfMeetingsBasedOnCoreSize();
+      this.putMetricData('LauncherRunning', 400);
+      const threadCount = this.NO_OF_THREADS;
+      const noOfMeetings = this.NO_OF_MEETINGS;
+      const noOfAttendeesPerMeeting = this.NO_ATTENDEES_PER_MEETING;
       console.log(threadCount);
       console.log(noOfMeetings);
       const threads = new Set();
@@ -165,12 +166,9 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       let meetingAttendeeListIndex = 0;
       const sqs = new SQSOperations();
       const meetingsDirectory = '';
-
       const loadTestStartTimeStampEpoch = Date.now();
-      //console.log(sessionTimeStamp);
       let lastMsgReceivedFromSQS = 0;
-      //for (let meeting = 0; meeting < noOfMeetings; meeting++) {
-      while (meetingAttendeeArray.length < noOfMeetings * MeetingLauncher.NO_ATTENDEES_PER_MEETING) {
+      while (meetingAttendeeArray.length < noOfMeetings * noOfAttendeesPerMeeting) {
         console.log('meetingAttendeeArray Length ', meetingAttendeeArray.length);
         try {
           const createMeetingWithAttendeesResponses = await sqs.getCreateMeetingWithAttendeesBody();
@@ -181,18 +179,9 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
               if (meetingAttendeeInfo && meetingAttendeeInfo.Meeting && meetingAttendeeInfo.Attendees) {
                 const meetingInfo = meetingAttendeeInfo.Meeting;
                 const attendeeInfo = meetingAttendeeInfo.Attendees;
-
-                // const meetingId = meetingInfo.MeetingId;
-                // if (!this.fileLocation.has(meetingId)) {
-                //   const fileLocation = meetingsDirectory + '/' + meetingId;
-                //   this.fileLocation.set(meetingId, fileLocation);
-                //   this.initializeFileToStoreMetricForMeeting(meetingId);
-                // }
-
-                //this.log('fileLocation...Run' + this.fileLocation.size);
                 let lock = false;
                 for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
-                  if (lock === false && meetingAttendeeListIndex < noOfMeetings * MeetingLauncher.NO_ATTENDEES_PER_MEETING) {
+                  if (lock === false && meetingAttendeeListIndex < noOfMeetings * this.NO_ATTENDEES_PER_MEETING) {
                     lock = true;
                     meetingAttendeeArray[meetingAttendeeListIndex] = {
                       Meeting: meetingInfo,
@@ -216,7 +205,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
         }
       }
       if (meetingAttendeeArray.length > 0) {
-        //meetingAttendeeArray = meetingAttendeeArray.slice(noOfMeetings);
         this.log('meetingAttendeeArrayLength ' + meetingAttendeeArray.length);
         this.putMetricData("meetingAttendeeArrayLength", meetingAttendeeArray.length);
         await this.spawnThreads(meetingAttendeeArray, threadCount, threads, meetingsDirectory, loadTestStartTimeStampEpoch);
@@ -235,19 +223,13 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
               rtcStatReport.printRTCStatReport(rtcStatReport, threadCount);
               meetingAttendeeList = null;
               meetingAttendeeArray = null;
-              this.transferDirectoryToS3('ChimeSDKMeetingsLoadTest/' + meetingsDirectory);
               this.done = 1;
-              this.cleanup();
             }
           });
 
           worker.on('message', async (message) => {
-            //const threadStatReport = message.webRTCStatReport;
-            //console.log('threadStatReport ----  ');
             const threadId = message.threadId;
             console.log('threadId complete ', threadId);
-
-            rtcStatReport.aggregationOperation(rtcStatReport, threadCount);
           });
         }
       }
@@ -306,10 +288,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     const browser = {};
     const webRTCStatReport = {};
     const page = {};
-
     const mapPageMeetingAttendee = new Map();
-    //const mapThreadMeetingId = new Map(new Set());
-
     webRTCStatReport[workerData.threadId] = new WebRTCStatReport(this.realTimeMetricAggregate);
 
     if (workerData.meetingAttendeeList) {
@@ -321,50 +300,12 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
         if (browser[browserTab] !== null && meetingInfo && attendeeInfo) {
           page[browserTab] = await this.createNewPage(browser[browserTab], browserTab, mapPageMeetingAttendee);
           if (page[browserTab] !== null && browser[browserTab].isConnected()) {
-            await this.openLinkInPage(page[browserTab], meetingInfo, attendeeInfo, browserTab);
-            //this.startAudioContext(page[browserTab]);
-            //console.log('this.fileLocation...Child', workerData.fileLocations);
+            this.openLinkInPage(page[browserTab], meetingInfo, attendeeInfo, browserTab);
           }
         }
       }
-
-      // for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-      //   this.startAudioContext(page[browserTab]);
-      // }
-
       const now = Date.now();
       await this.resumeAudioContextForAllPages(page);
-
-      //await this.setMeetingTimeout(page, reportFetch, workerData.threadId);
-
-      // for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-      //   const meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
-      //   const attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
-      // //
-      // //   this.leave[browserTab] = false;
-      // //
-      // //   await this.closeBrowser(browser[browserTab]);
-      // //
-      // //   //await this.startMeetingSession(page[browserTab], meetingInfo, attendeeInfo, browserTab, workerData.threadId);
-      // //
-      // //await this.fetchMetricsFromBrowser(browser, page, reportFetch, meetingInfo, attendeeInfo, browserTab, workerData.threadId);
-      //await this.fetchMetricsFromBrowser(page);
-
-
-      //await this.fetchMetricsFromBrowser(page);
-
-      // //
-      // //   //await browser[browserTab].close();
-      // //   if (browser[browserTab]) {
-      // //     await this.closeBrowser(browser[browserTab]);
-      // //   }
-      //}
-
-      await this.closeBrowser(browser,page);
-      webRTCStatReport[workerData.threadId].individualThreadWebRTCAvgReading(webRTCStatReport);
-      var count = Object.keys(page).length;
-      console.log(workerData.threadId, ' page ', count);
-
 
       if (this.realTimeMetricAggregate) {
         parentPort.postMessage({
@@ -382,7 +323,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   async openBrowser() {
     process.setMaxListeners(Infinity);
     const browser = await puppeteer.launch({
-      headless: false,
+      headless: true,
       args: [
         '--use-fake-ui-for-media-stream',
         '--disable-dev-shm-usage',
@@ -393,7 +334,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }).catch(async (err) => {
       this.error('Browser launch failed: ' + err);
       return this.openBrowser();
-      //await this.createWorkerThread(workerData.start, workerData.range, workerData.threadId + 1, workerData.meetingAttendeeList);
     });
 
     if (typeof browser !== 'undefined') {
@@ -423,41 +363,36 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       try {
         let loadTestStartTimeStampEpoch = workerData.loadTestStartTimeStampEpoch;
         let currentTimeStampEpoch = Date.now();
-
         let timeToWaitMS = 1000;
         if (loadTestStartTimeStampEpoch <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 60000) {
-          timeToWaitMS = 120000;  //2min 00 sec 120000ms
+          timeToWaitMS = 60000;  //2min 00 sec 120000ms
           this.putMetricData('timeToWaitMS-111', 1)
         } else if (loadTestStartTimeStampEpoch + 60000 <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 120000) {
-          timeToWaitMS = 60000;  //1min 00 sec
+          timeToWaitMS = 10000;  //1min 00 sec
           this.putMetricData('timeToWaitMS-222', 1)
         } else if (loadTestStartTimeStampEpoch + 120000 <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 180000) {
-          timeToWaitMS = 10000;  //1min   10 sec
+          timeToWaitMS = 8000;  //1min   10 sec
           this.putMetricData('timeToWaitMS-333', 1)
         } else if (loadTestStartTimeStampEpoch + 180000 <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 240000) {
           timeToWaitMS = 5000;  //0min 5 sec
           this.putMetricData('timeToWaitMS-444', 1)
         }
-        timeToWaitMS += 60000;
-        console.log('timeToWaitMS... ' + timeToWaitMS);
 
-        //const url = 'http://127.0.0.1:8080/?timeToWaitMS=' + timeToWaitMS + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo));
-        //const url = 'https://zft6ulm9lh.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
-        const url = 'https://u9ib9z88d7.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
-        this.log(url);
-        await page.setDefaultNavigationTimeout(0);
-        //const response = await page.goto(url).then(async () => {
-        const response = await page.goto(url);
+        if (this.NO_OF_MEETINGS > 30) {
+          timeToWaitMS += 5000;
+        }
+
+        const meetingLeaveAfterMs = timeToWaitMS + this.getRndDuration();
+        const url = 'https://u9ib9z88d7.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingLeaveAfterMs=' + meetingLeaveAfterMs + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
+        page.setDefaultNavigationTimeout(0);
+        const response = page.goto(url);
         this.log('Client Launched.... ', browserTab);
         this.putMetricData("ClientLaunched", 1);
-        //this.leave[browserTab] = false;
-        //await page.evaluate(() => document.getElementById('flow-meeting').click());
-        //});
       } catch (err) {
         this.error('Failed to load  ' + err, browserTab);
         this.meetingSessionActive.set(browserTab, false);
         noOfRetries += 1;
-        await this.openLinkInPage(page, meetingInfo, attendeeInfo, browserTab, noOfRetries);
+        this.openLinkInPage(page, meetingInfo, attendeeInfo, browserTab, noOfRetries);
       }
     }
   }
@@ -519,11 +454,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
           this.putMetricData("MeetingStartFailPageEvaluate", 1);
         }
       }
-      // if (doAgain === true) {
-      //   await this.resumeAudioContextForAllPages(page, false);
-      // }
-      //
-    }, 45000);
+    }, 60000);
   }
 
   startAudioContext(page) {
@@ -542,7 +473,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
           return new Promise((resolve, reject) => {
             try {
               document.body.click();
-              //document.getElementById('flow-meeting').click();
               resolve('Success');
             } catch (err) {
               resolve('Fail');
@@ -564,7 +494,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       const meetingStartStatus = await this.resumeAudioContext(page);
       if (meetingStartStatus === 'Success') {
         this.meetingSessionActive.set(browserTab, true);
-        console.log('this.meetingSessionActive' , this.meetingSessionActive , browserTab);
         this.log('Audio Context Resume Success on restarted page', browserTab);
         this.putMetricData('RestartMeetingSuccess', 1);
       } else {
@@ -588,7 +517,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }
 
     const pages = await browser.pages();
-    console.log('pages length ', pages.length);
     let page = null;
     if (pages.length > 0) {
       page = pages[0];
@@ -601,8 +529,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }
 
     if (typeof page !== 'undefined' && page !== null) {
-
-
       page.on('error', err => {
         this.error('Error occured: ' + err, browserTab);
         page = null;
@@ -610,16 +536,11 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
       page.on('close', async (message) => {
         this.putMetricData('PageClosed', 1);
-        console.log('this.meetingSessionActive' , this.meetingSessionActive , browserTab);
-        console.log('this.meetingSessionActive' , this.meetingSessionActive.get(browserTab));
-        this.log('this.loadTestEndSignal ' + this.loadTestEndSignal);
         this.log(page !== null);
         if (this.loadTestEndSignal === false && page !== null && mapPageMeetingAttendee[workerData.threadId, browserTab] && mapPageMeetingAttendee[workerData.threadId, browserTab].meetingInfo && mapPageMeetingAttendee[workerData.threadId, browserTab].attendeeInfo) {
           this.log('Attempting to restart...' , page);
-          //page = null;
           page = await this.createNewPage(browser, browserTab, mapPageMeetingAttendee);
           this.log('Attempting to restart 2222' + page);
-
           await this.resurrectClosedMeeting(page, mapPageMeetingAttendee[workerData.threadId, browserTab].meetingInfo, mapPageMeetingAttendee[workerData.threadId, browserTab].attendeeInfo, browserTab).then(() => {
             console.log('Meeting Restarted');
           }).catch(() => {
@@ -627,37 +548,20 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
             this.meetingSessionActive[browserTab] = false;
           });
         }
-        this.log('Page Closedddd');
+        this.log('Page Closed');
       });
     }
     return page;
   }
 
   async fetchMetricsFromBrowser(page) {
-    //await new Promise(resolve => setTimeout(resolve, 2500));
     setTimeout(() => {
-
       for (const [key, value] of Object.entries(page)) {
         this.reportFetch[key] = setInterval(async () => {
           this.putMetricData('Beacon-' + workerData.threadId, 1);
-          this.log(" meetingSessionActive " + this.meetingSessionActive.get(key));
           try {
             if (this.meetingSessionActive.get(key) === true && page[key] !== null) {
-              //this.log('Metrics Reading try', browserTab);
               const metricReport = await page[key].evaluate(() => app.metricReport);
-              // {
-              //   return new Promise(async (resolve, reject) => {
-              //     //try {
-              //     if (app) {
-              //       const metricStatsForTab = app.metricReport;
-              //       resolve(metricStatsForTab);
-              //     }
-              //     // } catch (err) {
-              //     //   console.error('App is undefined ' + err);
-              //     // }
-              //   });
-              // });
-
               if (metricReport.meetingId || metricReport.attendeeId || metricReport.audioDecoderLoss || metricReport.audioPacketsReceived || metricReport.audioPacketsReceivedFractionLoss || metricReport.audioSpeakerDelayMs || metricReport.availableReceiveBandwidth || metricReport.availableSendBandwidth) {
                 const bodyHTML = await page[key].evaluate(() => document.body.innerText);
                 this.log(bodyHTML);
@@ -669,18 +573,14 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
                 const bodyHTML = await page[key].evaluate(() => document.body.innerText);
                 this.log(bodyHTML);
                 console.log(' metricReport ', metricReport);
-                //this.log('this.meetingSessionActive[browserTab] 0000' + this.meetingSessionActive.get(key));
               }
-              //webRTCStatReport[workerData.threadId].writeMetric(metricReport, webRTCStatReport, this.realTimeMetricAggregate);
             } else {
               this.log('Failed Metrics Reading');
-              console.log(this.meetingSessionActive.get(key))
             }
           } catch (err) {
             this.error('Cannot retrieve Metrics from browser meeting ' + err.message);
-            this.error('this.meetingSessionActive[browserTab] ' + this.meetingSessionActive.get(key), key);
           }
-        }, MeetingLauncher.METRIC_GRAB_FREQUENCY);
+        }, this.METRIC_GRAB_FREQUENCY);
 
       }
     }, 180000);
@@ -690,17 +590,14 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     if (workerData.threadId === threadId && page !== null) {
       const tabRandomDuration = new Map();
       for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-        //console.log(workerData.threadId, ' ', browserTab, ' this.meetingSessionActive ', this.meetingSessionActive);
         if (!tabRandomDuration.has(browserTab)) {
           tabRandomDuration[browserTab] = this.getRndDuration();
         }
-        //console.log(workerData.threadId, ' ', browserTab, 'tabRandomDuration ', tabRandomDuration);
         setTimeout(async () => {
           try {
             if (page[browserTab] !== null) {
               this.log('Attempting to quit meeting', browserTab);
               this.meetingSessionActive[browserTab] = false;
-              //this.leave[browserTab] = true;
               clearInterval(reportFetch[browserTab]);
               reportFetch[browserTab] = null;
               const closeStatus = await page[browserTab].evaluate(async () => {
@@ -775,9 +672,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
   async closeBrowserTab(page) {
     try {
-      //reportFetch[browserTab] = null;
-      //this.leave[browserTab] = true;
-      this.meetingSessionActive[browserTab] = false;
       if (page !== null) {
         let localPage = page;
         page = null;
@@ -797,21 +691,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       setTimeout(async () => {
         for (const [key, value] of Object.entries(browser)) {
           if (browser[key] && browser[key].isConnected()) {
-
-            // await new Promise((resolve) => {
-            //   this.log('Thread Sleeping - waitfactor ' + waitFactor + ' - ' + MeetingLauncher.MAX_ACTIVE_TIME_MS * waitFactor);
-            //   //setTimeout(resolve, MeetingLauncher.MAX_ACTIVE_TIME_MS * waitFactor)
-            // });
-            // //use a while condition to check if the leave value is true or not
-            // //console.log(workerData.threadId, 'leave ', this.leave);
-            // for (let value of this.leave.values()) {
-            //   this.log('value ', value);
-            //   this.log('value === false ', value === false);
-            //   if (value === false) {
-            //     waitFactor = 0.3;
-            //     await this.closeBrowser(browser, waitFactor);
-            //   }
-            // }
             try {
               const pages = await browser[key].pages();
               await this.leaveMeeting(pages[0], key);
@@ -834,7 +713,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
             return;
           }
         }
-      }, MeetingLauncher.MIN_ACTIVE_TIME_MS * waitFactor);
+      }, this.MIN_ACTIVE_TIME_MS * waitFactor);
     }
   }
 
@@ -879,6 +758,50 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
         });
       } catch (err) {
         console.error(err.message);
+      }
+    }
+  }
+
+  validateLauncherParameters() {
+    const launcherArgs = require('minimist')(process.argv.slice(2));
+    if (Object.keys(launcherArgs).length > 1) {
+      const expectedParameters = {_: 1, meetingCount: 1, noOfThreads: 1, attendeesPerMeeting: 1, minDurationMin: 1, maxDurationMin: 1, metricGrabFrequencyMin: 1};
+      for (let [key, value] of Object.entries(launcherArgs)) {
+        if (!(key in expectedParameters)) {
+          console.log('Please check entered parameters');
+          console.log('Optional parameters: ', expectedParameters);
+          process.exit(1);
+        }
+      }
+
+      if (launcherArgs.meetingCount && typeof launcherArgs.meetingCount !== 'number') {
+        console.log('Parameter `meetingCount` should be of type `number`');
+        process.exit(1)
+      }
+
+      if (launcherArgs.noOfThreads && typeof launcherArgs.noOfThreads !== 'number') {
+        console.log('Parameter `noOfThreads` should be of type `number`');
+        process.exit(1)
+      }
+
+      if (launcherArgs.attendeesPerMeeting && typeof launcherArgs.attendeesPerMeeting !== 'number') {
+        console.log('Parameter `attendeesPerMeeting` should be of type `number`');
+        process.exit(1)
+      }
+
+      if (launcherArgs.minDurationMin && typeof launcherArgs.minDurationMin !== 'number') {
+        console.log('Parameter `minDurationMin` should be of type `number`');
+        process.exit(1)
+      }
+
+      if (launcherArgs.maxDurationMin && typeof launcherArgs.maxDurationMin !== 'number') {
+        console.log('Parameter `maxDurationMin` should be of type `number`');
+        process.exit(1)
+      }
+
+      if (launcherArgs.metricGrabFrequencyMin && typeof launcherArgs.metricGrabFrequencyMin !== 'number') {
+        console.log('Parameter `metricGrabFrequencyMin` should be of type `number`');
+        process.exit(1)
       }
     }
   }
