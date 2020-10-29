@@ -7,6 +7,14 @@ const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
 
 export default class SQSOperations {
 
+  constructor() {
+    this.SQS_QUEUE_URL = '';
+  }
+
+  async init(queueNamePrefix) {
+    this.SQS_QUEUE_URL = await this.getSQSQueryURL(queueNamePrefix);
+  }
+
   async getCreateMeetingWithAttendeesResponse() {
     const externalUserIdList = [];
     for (let iter = 0; iter < 10; iter += 1) {
@@ -33,12 +41,11 @@ export default class SQSOperations {
   }
 
   async putCreateMeetingWithAttendeesResponseToSQS() {
-    const SQS_QUEUE_URL = await this.getSQSQueryURL('E2ELoadTestStack-ResponseQueue');
-    console.log('putCreateMeetingWithAttendeesResponseToSQS ', SQS_QUEUE_URL);
+    console.log('putCreateMeetingWithAttendeesResponseToSQS ', this.SQS_QUEUE_URL);
     const createMeetingWithAttendeesResponse = await this.getCreateMeetingWithAttendeesResponse();
     var params = {
       MessageBody: JSON.stringify(createMeetingWithAttendeesResponse),
-      QueueUrl: SQS_QUEUE_URL
+      QueueUrl: this.SQS_QUEUE_URL
     };
     sqs.sendMessage(params, (err, data) => {
       if (err) {
@@ -60,23 +67,46 @@ export default class SQSOperations {
     return null;
   }
 
-  async getCreateMeetingWithAttendeesBody() {
-    const SQS_QUEUE_URL = await this.getSQSQueryURL('E2ELoadTestStack-ResponseQueue');
-    console.log('getCreateMeetingWithAttendeesBody ', SQS_QUEUE_URL);
+  async getApproxNumberOfMsgs() {
     const params = {
-      QueueUrl: SQS_QUEUE_URL,
+      QueueUrl: this.SQS_QUEUE_URL,
+      AttributeNames : ['ApproximateNumberOfMessages'],
+    };
+    sqs.getQueueAttributes(params, function(err, data){
+      if (err) {
+        console.log("Error", err);
+      } else {
+        console.log('Approx No Of Messages : ' , data);
+      }
+    });
+  }
+
+  async getCreateMeetingWithAttendeesBody() {
+    console.log('getCreateMeetingWithAttendeesBody ', this.SQS_QUEUE_URL);
+    const params = {
+      QueueUrl: this.SQS_QUEUE_URL,
       MaxNumberOfMessages: 10
     };
     const CreateMeetingWithAttendeesBodyList = [];
     const CreateMeetingWithAttendeesBody = await sqs.receiveMessage(params).promise();
     return CreateMeetingWithAttendeesBody;
-  }
-}
 
-async function purgeMessageQueue() {
-  const SQS_QUEUE_URL = await this.getSQSQueryURL('E2ELoadTestStack-ResponseQueue');
-  const request = sqs.purgeQueue({
-    QueueUrl: SQS_QUEUE_URL
-  });
-  return request.promise().catch(e => console.log('purgeQueueError', {error: e}))
+    if (CreateMeetingWithAttendeesBody && CreateMeetingWithAttendeesBody.Messages) {
+      for (let msg = 0; msg < CreateMeetingWithAttendeesBody.Messages.length; msg++) {
+        const deleteParams = {
+          QueueUrl: this.SQS_QUEUE_URL,
+          ReceiptHandle: CreateMeetingWithAttendeesBody.Messages[msg].ReceiptHandle
+        };
+        await sqs.deleteMessage(deleteParams).promise();
+      }
+    }
+    return CreateMeetingWithAttendeesBody;
+  }
+
+  async purgeMessageQueue() {
+    const request = sqs.purgeQueue({
+      QueueUrl: this.SQS_QUEUE_URL
+    });
+    return request.promise().catch(e => console.log('purgeQueueError', {error: e}))
+  }
 }
