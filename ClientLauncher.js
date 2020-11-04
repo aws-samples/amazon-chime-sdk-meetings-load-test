@@ -1,6 +1,7 @@
 import {createRequire} from 'module';
 import SQSOperations from './SQSOperations.js';
 import WebRTCStatReport from './WebRTCStatReport.js';
+import serverlessRestApiForAccountMap from './configs/ServerlessRestApiAccountMap.js';
 
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
@@ -10,7 +11,7 @@ const os = require('os');
 const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
 
 class MeetingLauncher {
-  static FILE_NAME = 'ClientLauncher.js';
+  static FILE_NAME = './ClientLauncher.js';
   meetingSessionActive = new Map();
   fileLocation = new Map();
   loadTestEndSignal = false;
@@ -26,7 +27,7 @@ class MeetingLauncher {
     this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1500000;
     this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 1505000;
     this.METRIC_GRAB_FREQUENCY = launcherArgs.metricGrabFrequencyMin * 60 * 1000 || 1000;
-    this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'CustomLT';
+    this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'AlivePing';
     this.run();
     this.done = 0;
   }
@@ -64,16 +65,25 @@ class MeetingLauncher {
     exec(`sudo ps aux | grep puppeteer | grep -v grep | awk '{print $2}' | xargs kill -9`);
   }
 
+  async getAcctountDetails() {
+    const cmd = `curl -s http://169.254.169.254/latest/dynamic/instance-identity/document`;
+    const acctountDetails = JSON.parse(await this.runCmdAsync(cmd));
+    return acctountDetails;
+  }
+
+  async getInstanceId() {
+    const cmd = `curl http://169.254.169.254/latest/meta-data/instance-id`;
+    const instanceId = await this.runCmdAsync(cmd);
+    return instanceId;
+  }
+
   async spawnThreads(meetingAttendeeList, threadCount, threads, loadTestStartTimeStampEpoch) {
     const max = meetingAttendeeList.length;
     const min = 0;
     console.log(`Running with ${threadCount} threads...`);
     let start = min;
-    let cmd = `curl -s http://169.254.169.254/latest/dynamic/instance-identity/document`;
-    const acctountDetails = JSON.parse(await this.runCmdAsync(cmd));
-    const accountId = acctountDetails.accountId;
-    cmd = `curl http://169.254.169.254/latest/meta-data/instance-id`;
-    const instanceId = await this.runCmdAsync(cmd);
+    const accountId = (await this.getAcctountDetails()).accountId;
+    const instanceId = await this.getInstanceId();
     if (max % threadCount === 0) {
       const range = (max / threadCount);
       for (let threadId = 0; threadId < threadCount; threadId++) {
@@ -141,9 +151,9 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   getNoOfMeetingsBasedOnCoreSize() {
     const cpuCount = os.cpus().length;
     if (cpuCount > 36) {
-      return Math.floor(cpuCount * 0.70);
+      return Math.floor(cpuCount * 0.50);
     }
-    return Math.floor(cpuCount);
+    return Math.floor(cpuCount * 0.70);
   }
 
   getNoOThreadsBasedOnCoreSize() {
@@ -153,24 +163,25 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
   async run() {
     if (isMainThread) {
-      this.putMetricData('LauncherRunning', 500);
+      this.putMetricData('LauncherRunning', 600);
       const threadCount = this.NO_OF_THREADS;
       const noOfMeetings = this.NO_OF_MEETINGS;
       const noOfAttendeesPerMeeting = this.NO_ATTENDEES_PER_MEETING;
-      console.log(threadCount);
-      console.log(noOfMeetings);
+      this.log('ThreadCount: ' + threadCount);
+      this.log('No Of Meetings: ' + noOfMeetings);
       const threads = new Set();
       let meetingAttendeeList = new SharedArrayBuffer();
       let meetingAttendeeArray = new Array();
       let meetingAttendeeListIndex = 0;
       const sqs = new SQSOperations();
       await sqs.init('E2ELoadTestStack-ResponseQueue');
-      const loadTestStartTimeStampEpoch = Date.now();
       let lastMsgReceivedFromSQS = 0;
       while (meetingAttendeeArray.length < noOfMeetings * noOfAttendeesPerMeeting) {
         console.log('meetingAttendeeArray Length ', meetingAttendeeArray.length);
         try {
           const createMeetingWithAttendeesResponses = await sqs.getCreateMeetingWithAttendeesBody();
+          console.log('------> ', new Date());
+          console.log(createMeetingWithAttendeesResponses);
           if (createMeetingWithAttendeesResponses && createMeetingWithAttendeesResponses.Messages) {
             lastMsgReceivedFromSQS = Date.now();
             for (let response = 0; response < Math.min(noOfMeetings, createMeetingWithAttendeesResponses.Messages.length); response += 1) {
@@ -186,6 +197,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
                       Meeting: meetingInfo,
                       Attendees: attendeeInfo[attendee]
                     };
+                    console.log(meetingAttendeeArray[meetingAttendeeListIndex]);
                     meetingAttendeeListIndex += 1;
                     lock = false;
                   }
@@ -204,6 +216,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
         }
       }
       if (meetingAttendeeArray.length > 0) {
+        const loadTestStartTimeStampEpoch = Date.now();
         this.log('meetingAttendeeArrayLength ' + meetingAttendeeArray.length);
         this.putMetricData("meetingAttendeeArrayLength", meetingAttendeeArray.length);
         await this.spawnThreads(meetingAttendeeArray, threadCount, threads, loadTestStartTimeStampEpoch);
@@ -215,10 +228,10 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
           worker.on('exit', () => {
             threads.delete(worker);
-            console.log(`Thread exiting, ${threads.size} running...`);
+            this.log(`Thread exiting ${threads.size} running...`);
             this.putMetricData('ThreadExit', 1);
             if (threads.size === 0) {
-              console.log('Threads ended');
+              this.log('Threads ended');
               meetingAttendeeList = null;
               meetingAttendeeArray = null;
               this.done = 1;
@@ -227,14 +240,19 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
           worker.on('message', async (message) => {
             const threadId = message.threadId;
-            console.log(worker.threadId, 'threadId complete ', threadId);
+            const accountId = message.accountId;
+            const instanceId = message.instanceId;
+            this.log('ThreadId complete ', threadId);
             threads.delete(worker);
             if (threads.size === 0) {
-              console.log('Threads ending');
+              this.log('Threads ending');
               this.putMetricData('ThreadExit', 1);
               meetingAttendeeList = null;
               meetingAttendeeArray = null;
               this.done = 1;
+              const filename = 'Log_' + accountId + '_' + instanceId;
+              this.transferFileToS3(filename);
+              console.log(filename);
               setTimeout(() => {
                 process.exit(0);
               }, 250000);
@@ -267,7 +285,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
         if (err) {
           console.error('Failed to create file due to ' + err.message + dataToWriteToFile);
         } else {
-          console.log('File created ' + meetingId);
+          this.log('File created ' + meetingId);
         }
       });
     } catch (err) {
@@ -277,20 +295,42 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   }
 
   log(str, tabNo = '') {
+    let data = '';
     if (isMainThread) {
-      console.log('[Master Thread] ' + str);
+      data += '[Master Thread] ' + str ;
+      console.log(data);
     } else {
-      console.log(workerData.threadId + '  ' + tabNo + ' [Child Thread] ' + str);
+      data += workerData.threadId + '  ' + tabNo + ' [Child Thread] ' + str;
+      console.log(data);
     }
+    this.writeLogErrorToFile(data);
   }
 
   error(str, tabNo = '') {
     this.putMetricData("[ERROR]", 1);
+    let data = '';
     if (isMainThread) {
-      console.log('[Master Thread ERROR] ' + str);
+      data += '[Master Thread ERROR] ' + str ;
+      console.log(data);
     } else {
-      console.log(workerData.threadId + '  ' + tabNo + ' [Child Thread Error] ' + str);
+      data += workerData.threadId + '  ' + tabNo + ' [Child Thread ERROR] ' + str;
+      console.log(data);
     }
+    this.writeLogErrorToFile(data);
+  }
+
+  async writeLogErrorToFile (data) {
+    const accountId = (await this.getAcctountDetails()).accountId;
+    const instanceId = await this.getInstanceId();
+    const filename = 'Log_' + accountId + '_' + instanceId;
+    fs.appendFile(filename, data+'\n', function (err) {
+      if (err) throw err;
+    });
+  }
+
+  transferFileToS3(fileToUpload) {
+    exec(`aws s3api put-object --bucket chimesdkmeetingsloadtest --key logs/`);
+    exec(`aws s3 cp ${fileToUpload} s3://chimesdkmeetingsloadtest/logs/ `);
   }
 
   async childThreadActivity() {
@@ -320,11 +360,15 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       if (this.realTimeMetricAggregate) {
         parentPort.postMessage({
           threadId: workerData.threadId,
+          instanceId: workerData.instanceId,
+          accountId: workerData.accountId,
           webRTCStatReport: webRTCStatReport[workerData.threadId]
         });
       } else {
         parentPort.postMessage({
-          threadId: workerData.threadId
+          threadId: workerData.threadId,
+          instanceId: workerData.instanceId,
+          accountId: workerData.accountId
         });
       }
     }
@@ -411,15 +455,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   }
 
   getServerlessRestApiForAccount(accountId) {
-    const serverlessRestApiForAccountMap = {
-      '306496942465': 'w0j505c47l',
-      '080387808500': 'ukh47e69sk',
-      '320086063710': '6t90l8dr42',
-      '302729982612': 'kh2optxdx9',
-      '616166470581': '1cj6it0wna',
-      '100106417351': 'c53kerdn10',
-      '770548120233': 'u9ib9z88d7'
-    };
     if(accountId in serverlessRestApiForAccountMap) {
       return serverlessRestApiForAccountMap[accountId];
     }
@@ -469,7 +504,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
           const meetingStartStatus = await this.resumeAudioContext(page[key], key);
           if (meetingStartStatus === 'Success') {
             this.meetingSessionActive.set(key, true);
-            console.log('this.meetingSessionActive' , this.meetingSessionActive , key);
             this.log('Audio Context Resume Success', key);
             this.putMetricData('AudioContextResumed-' + doAgain, 1);
           } else {
@@ -502,7 +536,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
           return new Promise((resolve, reject) => {
             try {
               document.body.click();
-              //document.getElementById('flow-meeting').click();
               resolve('Success');
             } catch (err) {
               resolve('Fail');
@@ -518,13 +551,13 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
   async resurrectClosedMeeting(page, meetingInfo, attendeeInfo, browserTab) {
     try {
-      console.log('Restarting Meeting... ', meetingInfo, attendeeInfo);
+      this.log('Restarting Meeting... ', meetingInfo, attendeeInfo);
       await this.openLinkInPage(page, meetingInfo, attendeeInfo, browserTab);
       await new Promise(resolve => setTimeout(resolve, 3000));
       const meetingStartStatus = await this.resumeAudioContext(page);
       if (meetingStartStatus === 'Success') {
         this.meetingSessionActive.set(browserTab, true);
-        console.log('this.meetingSessionActive' , this.meetingSessionActive , browserTab);
+        this.log('this.meetingSessionActive' , this.meetingSessionActive , browserTab);
         this.log('Audio Context Resume Success on restarted page', browserTab);
         this.putMetricData('RestartMeetingSuccess', 1);
       } else {
@@ -548,7 +581,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }
 
     const pages = await browser.pages();
-    console.log('pages length ', pages.length);
     let page = null;
     if (pages.length > 0) {
       page = pages[0];
@@ -567,8 +599,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
       page.on('close', async (message) => {
         this.putMetricData('PageClosed', 1);
-        console.log('this.meetingSessionActive' , this.meetingSessionActive , browserTab);
-        console.log('this.meetingSessionActive' , this.meetingSessionActive.get(browserTab));
         this.log('this.loadTestEndSignal ' + this.loadTestEndSignal);
         this.log(page !== null);
         if (this.loadTestEndSignal === false && page !== null && mapPageMeetingAttendee[workerData.threadId, browserTab] && mapPageMeetingAttendee[workerData.threadId, browserTab].meetingInfo && mapPageMeetingAttendee[workerData.threadId, browserTab].attendeeInfo) {
@@ -576,9 +606,9 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
           page = await this.createNewPage(browser, browserTab, mapPageMeetingAttendee);
           this.log('Attempting to restart 2222' + page);
           await this.resurrectClosedMeeting(page, mapPageMeetingAttendee[workerData.threadId, browserTab].meetingInfo, mapPageMeetingAttendee[workerData.threadId, browserTab].attendeeInfo, browserTab).then(() => {
-            console.log('Meeting Restarted');
+            this.log('Meeting Restarted', browserTab);
           }).catch(() => {
-            console.log('Meeting failed to restart');
+            this.log('Meeting failed to restart', browserTab);
             this.meetingSessionActive[browserTab] = false;
           });
         }
@@ -600,18 +630,15 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
               if (metricReport.meetingId || metricReport.attendeeId || metricReport.audioDecoderLoss || metricReport.audioPacketsReceived || metricReport.audioPacketsReceivedFractionLoss || metricReport.audioSpeakerDelayMs || metricReport.availableReceiveBandwidth || metricReport.availableSendBandwidth) {
                 const bodyHTML = await page[key].evaluate(() => document.body.innerText);
                 this.log(bodyHTML);
-                console.log(' metricReport ', metricReport);
                 this.writeMetricsToFile(metricReport, metricReport.attendeeId, workerData.meetingsDirectory + '/' + metricReport.meetingId);
               } else {
                 this.log('Metrics not received');
                 this.putMetricData('MeetingInactive', 1);
                 const bodyHTML = await page[key].evaluate(() => document.body.innerText);
                 this.log(bodyHTML);
-                console.log(' metricReport ', metricReport);
               }
             } else {
               this.log('Failed Metrics Reading');
-              console.log(this.meetingSessionActive.get(key))
             }
           } catch (err) {
             this.error('Cannot retrieve Metrics from browser meeting ' + err.message);
@@ -646,7 +673,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
                   }
                 });
               });
-              console.log('closeStatus ', closeStatus);
               if (closeStatus === 'Success') {
                 this.log('Tab closed', browserTab);
                 this.putMetricData("MeetingLeaveSuccess", 1);
@@ -659,9 +685,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
           } catch (err) {
             this.error('Failed to end meeting ' + err, browserTab);
             this.putMetricData("MeetingLeaveFail", 1);
-
-            const bodyHTML = await page[browserTab].evaluate(() => document.body.innerText);
-            console.log(bodyHTML);
           } finally {
             page[browserTab] = null;
             this.meetingSessionActive[browserTab] = false;
@@ -688,7 +711,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
           }
         });
       });
-      console.log('closeStatus ', closeStatus);
       if (closeStatus === 'Success') {
         this.log('Tab closed', browserTab);
         this.putMetricData("MeetingLeaveSuccess", 1);
@@ -699,8 +721,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     } catch (err) {
       this.error('Failed to end meeting ' + err, browserTab);
       this.putMetricData("MeetingLeaveFail", 1);
-      const bodyHTML = await page.evaluate(() => document.body.innerText);
-      console.log(bodyHTML);
     }
   }
 
@@ -717,8 +737,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       }
     } catch (err) {
       this.error('Close BrowserTab failed ' + err);
-      const bodyHTML = await page[browserTab].evaluate(() => document.body.innerText);
-      console.log(bodyHTML);
     }
   }
 
@@ -731,7 +749,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
               const pages = await browser[key].pages();
               await this.leaveMeeting(pages[0], key);
               this.log('Close browser initiated');
-              //await browser.disconnect();
               this.meetingSessionActive.set(key, false);
               if (typeof this.reportFetch !== 'undefined' && this.reportFetch[key] !== null) {
                 clearInterval(this.reportFetch[key]);
@@ -739,7 +756,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
               }
               await pages[0].close();
             } catch (err) {
-              console.log(err);
+              this.error(err);
             } finally {
               await browser[key].close();
               this.putMetricData("BrowserClose", 1);

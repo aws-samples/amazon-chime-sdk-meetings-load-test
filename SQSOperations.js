@@ -61,9 +61,12 @@ export default class SQSOperations {
       MaxResults: 1,
       QueueNamePrefix: queueNamePrefix
     };
+    console.log(queueNamePrefix);
     const listQueues = await sqs.listQueues(params).promise();
-    if(listQueues && listQueues.QueueUrls)
+    if(listQueues && listQueues.QueueUrls) {
+      console.log(listQueues.QueueUrls[0]);
       return listQueues.QueueUrls[0];
+    }
     return null;
   }
 
@@ -85,7 +88,8 @@ export default class SQSOperations {
     console.log('getCreateMeetingWithAttendeesBody ', this.SQS_QUEUE_URL);
     const params = {
       QueueUrl: this.SQS_QUEUE_URL,
-      MaxNumberOfMessages: 10
+      MaxNumberOfMessages: 10,
+      VisibilityTimeout: 30
     };
     const CreateMeetingWithAttendeesBodyList = [];
     const CreateMeetingWithAttendeesBody = await sqs.receiveMessage(params).promise();
