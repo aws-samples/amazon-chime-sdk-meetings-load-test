@@ -19,6 +19,11 @@
   },
   "devDependencies": {
     "aws-sdk": "^2.728.0",
+    "eslint": "^7.13.0",
+    "eslint-config-standard": "^16.0.1",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
     "ts-node": "^9.0.0",
     "typescript": "^4.0.3"
   }

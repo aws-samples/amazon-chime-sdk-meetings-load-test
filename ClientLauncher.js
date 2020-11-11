@@ -8,6 +8,7 @@ const puppeteer = require('puppeteer');
 const {exec} = require('child_process');
 const fs = require('fs');
 const os = require('os');
+const minimist = require('minimist');
 const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
 
 class MeetingLauncher {
@@ -20,7 +21,7 @@ class MeetingLauncher {
 
   constructor() {
     this.validateLauncherParameters();
-    const launcherArgs = require('minimist')(process.argv.slice(2));
+    const launcherArgs = minimist(process.argv.slice(2));
     this.NO_OF_MEETINGS = launcherArgs.meetingCount || this.getNoOfMeetingsBasedOnCoreSize();
     this.NO_OF_THREADS = launcherArgs.noOfThreads || this.getNoOThreadsBasedOnCoreSize();
     this.NO_ATTENDEES_PER_MEETING = launcherArgs.attendeesPerMeeting || 10;
@@ -170,22 +171,21 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       this.log('ThreadCount: ' + threadCount);
       this.log('No Of Meetings: ' + noOfMeetings);
       const threads = new Set();
-      let meetingAttendeeList = new SharedArrayBuffer();
+      //let meetingAttendeeList = new SharedArrayBuffer();
       let meetingAttendeeArray = new Array();
       let meetingAttendeeListIndex = 0;
       const sqs = new SQSOperations();
       await sqs.init('E2ELoadTestStack-ResponseQueue');
-      let lastMsgReceivedFromSQS = 0;
+      let lastMsgReceivedFromSQS = Date.now();
+      this.log((meetingAttendeeArray.length < noOfMeetings * noOfAttendeesPerMeeting).toString());
       while (meetingAttendeeArray.length < noOfMeetings * noOfAttendeesPerMeeting) {
-        console.log('meetingAttendeeArray Length ', meetingAttendeeArray.length);
         try {
           const createMeetingWithAttendeesResponses = await sqs.getCreateMeetingWithAttendeesBody();
-          console.log('------> ', new Date());
-          console.log(createMeetingWithAttendeesResponses);
           if (createMeetingWithAttendeesResponses && createMeetingWithAttendeesResponses.Messages) {
             lastMsgReceivedFromSQS = Date.now();
             for (let response = 0; response < Math.min(noOfMeetings, createMeetingWithAttendeesResponses.Messages.length); response += 1) {
               const meetingAttendeeInfo = JSON.parse(createMeetingWithAttendeesResponses.Messages[response].Body);
+              //this.log(JSON.stringify(meetingAttendeeInfo));
               if (meetingAttendeeInfo && meetingAttendeeInfo.Meeting && meetingAttendeeInfo.Attendees) {
                 const meetingInfo = meetingAttendeeInfo.Meeting;
                 const attendeeInfo = meetingAttendeeInfo.Attendees;
@@ -197,7 +197,8 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
                       Meeting: meetingInfo,
                       Attendees: attendeeInfo[attendee]
                     };
-                    console.log(meetingAttendeeArray[meetingAttendeeListIndex]);
+                    //this.log(meetingAttendeeListIndex + ' ------> ' + new Date().toString());
+                    this.log(meetingAttendeeListIndex + ' ' + JSON.stringify(meetingAttendeeArray[meetingAttendeeListIndex]));
                     meetingAttendeeListIndex += 1;
                     lock = false;
                   }
@@ -209,6 +210,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
             if (Date.now() - lastMsgReceivedFromSQS > 10000){
               meetingAttendeeArray = [];
               meetingAttendeeListIndex = 0;
+              this.log('meetingAttendeeArray cleaned');
             }
           }
         } catch (err) {
@@ -217,8 +219,8 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
       }
       if (meetingAttendeeArray.length > 0) {
         const loadTestStartTimeStampEpoch = Date.now();
-        this.log('meetingAttendeeArrayLength ' + meetingAttendeeArray.length);
-        this.putMetricData("meetingAttendeeArrayLength", meetingAttendeeArray.length);
+        this.log('MeetingAttendeeArrayLength ' + meetingAttendeeArray.length);
+        this.putMetricData("MeetingAttendeeArrayLength", meetingAttendeeArray.length);
         await this.spawnThreads(meetingAttendeeArray, threadCount, threads, loadTestStartTimeStampEpoch);
         const rtcStatReport = new WebRTCStatReport(this.realTimeMetricAggregate);
         for (let worker of threads) {
@@ -232,7 +234,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
             this.putMetricData('ThreadExit', 1);
             if (threads.size === 0) {
               this.log('Threads ended');
-              meetingAttendeeList = null;
               meetingAttendeeArray = null;
               this.done = 1;
             }
@@ -247,7 +248,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
             if (threads.size === 0) {
               this.log('Threads ending');
               this.putMetricData('ThreadExit', 1);
-              meetingAttendeeList = null;
               meetingAttendeeArray = null;
               this.done = 1;
               const filename = 'Log_' + accountId + '_' + instanceId;
@@ -295,7 +295,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   }
 
   log(str, tabNo = '') {
-    let data = '';
+    let data = new Date().toString() + ' ';
     if (isMainThread) {
       data += '[Master Thread] ' + str ;
       console.log(data);
@@ -308,7 +308,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
   error(str, tabNo = '') {
     this.putMetricData("[ERROR]", 1);
-    let data = '';
+    let data = new Date().toString() + ' ';
     if (isMainThread) {
       data += '[Master Thread ERROR] ' + str ;
       console.log(data);
@@ -420,13 +420,16 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
         let timeToWaitMS = 1000;
         if (loadTestStartTimeStampEpoch <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 60000) {
-          timeToWaitMS = 120000;  //2min 00 sec 120000ms
+          //timeToWaitMS = 120000;  //2min 00 sec
+          timeToWaitMS = 60000;  //2min 00 sec
           this.putMetricData('timeToWaitMS-111', 1)
         } else if (loadTestStartTimeStampEpoch + 60000 <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 120000) {
-          timeToWaitMS = 60000;  //1min 00 sec
+          //timeToWaitMS = 60000;  //1min 00 sec
+          timeToWaitMS = 30000;  //2min 00 sec
           this.putMetricData('timeToWaitMS-222', 1)
         } else if (loadTestStartTimeStampEpoch + 120000 <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 180000) {
-          timeToWaitMS = 25000;  //0min   25 sec
+          //timeToWaitMS = 25000;  //0min   25 sec
+          timeToWaitMS = 15000;  //0min   25 sec
           this.putMetricData('timeToWaitMS-333', 1)
         } else if (loadTestStartTimeStampEpoch + 180000 <= currentTimeStampEpoch && currentTimeStampEpoch < loadTestStartTimeStampEpoch + 240000) {
           timeToWaitMS = 5000;  //0min 5 sec
@@ -439,7 +442,8 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 
         const meetingLeaveAfterMs = timeToWaitMS + this.getRndDuration();
         const serverlessRestApi = this.getServerlessRestApiForAccount(workerData.accountId);
-        const url = 'https://' + serverlessRestApi + '.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingLeaveAfterMs=' + meetingLeaveAfterMs + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
+        //const url = 'https://' + serverlessRestApi + '.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingLeaveAfterMs=' + meetingLeaveAfterMs + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
+        const url = 'http://127.0.0.1:8080/?timeToWaitMS=' + timeToWaitMS + '&meetingLeaveAfterMs=' + meetingLeaveAfterMs + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
         this.log(url);
         page.setDefaultNavigationTimeout(0);
         const response = page.goto(url);

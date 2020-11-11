@@ -22,4 +22,3 @@ shell.exec(cmd);
 shell.exec(`aws s3api create-bucket --bucket chimesdkmeetingsloadtest --region us-east-1`);
 shell.exec(`aws s3api put-object --bucket chimesdkmeetingsloadtest --key src/`);
 shell.exec(`aws s3 cp ~/ChimeSDKMeetingsLoadTest/src/ChimeSDKMeetingsLoadTest/ s3://chimesdkmeetingsloadtest/src/ --recursive --include '*.js' --exclude '.git/*' --exclude 'node_modules/*' --exclude '.idea/*'`);
-
