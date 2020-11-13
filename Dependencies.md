@@ -8,6 +8,7 @@ npm i uuid
 npm install aws-sdk
 npm i minimist
 npm i shelljs
+npm i aws-embedded-metrics
 
 sudo yum install -y cups-libs dbus-glib libXrandr libXcursor libXinerama cairo cairo-gobject pango
 sudo yum install -y libXrandr.*

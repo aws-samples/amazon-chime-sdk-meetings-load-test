@@ -10,6 +10,8 @@ const fs = require('fs');
 const os = require('os');
 const minimist = require('minimist');
 const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
+require('events').EventEmitter.prototype._maxListeners = Infinity;
+const { metricScope } = require("aws-embedded-metrics");
 
 class MeetingLauncher {
   static FILE_NAME = './ClientLauncher.js';
@@ -144,9 +146,22 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }
   }
 
-  putMetricData(metricName, metricValue, namespace = this.PUT_METRIC_DATA_NAMESPACE) {
-    const cmd = `aws cloudwatch put-metric-data --metric-name ${metricName} --dimensions Instance=\`curl http://169.254.169.254/latest/meta-data/instance-id\`  --namespace ${namespace} --value ${metricValue}`;
-    exec(cmd);
+  // putMetricData(metricName, metricValue, namespace = this.PUT_METRIC_DATA_NAMESPACE) {
+  //   const cmd = `aws cloudwatch put-metric-data --metric-name ${metricName} --dimensions Instance=\`curl http://169.254.169.254/latest/meta-data/instance-id\`  --namespace ${namespace} --value ${metricValue}`;
+  //   exec(cmd);
+  // }
+
+  async putMetricData(metricName, metricValue) {
+    const instanceId = await this.getInstanceId();
+    const startTime = 'MasterThread N/A';
+    const putMetric =
+      metricScope(metrics => async (instanceId, startTime, metricName, metricValue) => {
+        console.log("received message");
+        metrics.putDimensions({IId: instanceId, StartTime: startTime});
+        metrics.putMetric(metricName, metricValue);
+        console.log("completed aggregation successfully.");
+      });
+    putMetric(instanceId, startTime, metricName, metricValue);
   }
 
   getNoOfMeetingsBasedOnCoreSize() {
@@ -154,7 +169,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     if (cpuCount > 36) {
       return Math.floor(cpuCount * 0.50);
     }
-    return Math.floor(cpuCount * 0.70);
+    return Math.floor(cpuCount * 0.40);
   }
 
   getNoOThreadsBasedOnCoreSize() {
@@ -244,7 +259,9 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
             const accountId = message.accountId;
             const instanceId = message.instanceId;
             this.log('ThreadId complete ', threadId);
-            threads.delete(worker);
+            const filename = 'Log_' + accountId + '_' + instanceId;
+            this.transferFileToS3(filename);
+            //threads.delete(worker);
             if (threads.size === 0) {
               this.log('Threads ending');
               this.putMetricData('ThreadExit', 1);
@@ -254,7 +271,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
               this.transferFileToS3(filename);
               console.log(filename);
               setTimeout(() => {
-                process.exit(0);
+                //process.exit(0);
               }, 250000);
             }
           });
