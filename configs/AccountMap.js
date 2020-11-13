@@ -4,7 +4,7 @@ let accountMap = {
   'aws-uc-loadtest-gamma-iad-003-admin': '320086063710',
   'aws-uc-loadtest-gamma-iad-004-admin': '302729982612',
   'aws-uc-loadtest-gamma-iad-005-admin': '616166470581',
-  'aws-uc-loadtest-gamma-iad-006-admin': '100106417351'
+  'aws-uc-loadtest-gamma-iad-006-admin': '100106417351',
 };
 
 export default accountMap;

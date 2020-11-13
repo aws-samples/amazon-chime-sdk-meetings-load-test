@@ -1,4 +1,4 @@
-import {createRequire} from 'module';
+import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const shell = require('shelljs');
 import accountMap from '../configs/AccountMap.js';

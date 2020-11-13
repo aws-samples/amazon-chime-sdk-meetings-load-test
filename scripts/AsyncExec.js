@@ -6,7 +6,7 @@ function execAsync(cmd) {
       if (error) {
         console.warn(error);
       }
-      resolve(stdout? stdout : stderr);
+      resolve(stdout ? stdout : stderr);
     });
   });
 }

@@ -1,8 +1,8 @@
-import {createRequire} from 'module';
+import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const shell = require('shelljs');
 import accountMap from '../configs/AccountMap.js';
-const {exec} = require('child_process');
+const { exec } = require('child_process');
 
 for (const [role, accNumber] of Object.entries(accountMap)) {
   console.log('Enabling Event Bridge E2ECommenceFeeding for Account Number: ', accNumber);

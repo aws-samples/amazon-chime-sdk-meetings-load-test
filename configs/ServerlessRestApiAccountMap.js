@@ -5,7 +5,7 @@ const serverlessRestApiForAccountMap = {
   '302729982612': 'kh2optxdx9',
   '616166470581': '1cj6it0wna',
   '100106417351': 'c53kerdn10',
-  '770548120233': 'u9ib9z88d7'
+  '770548120233': 'u9ib9z88d7',
 };
 
 export default serverlessRestApiForAccountMap;
