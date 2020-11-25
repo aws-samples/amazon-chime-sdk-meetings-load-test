@@ -5,22 +5,22 @@ Mappings:
   AccountsMap:
     "306496942465":
       amiid: "ami-08bb13b38534c6abe"
-      TPS: 5
+      InstanceCount: 5
     "080387808500":
       amiid: "ami-08bb13b38534c6abe"
-      TPS: 5
+      InstanceCount: 5
     "320086063710":
       amiid: "ami-08bb13b38534c6abe"
-      TPS: 5
+      InstanceCount: 5
     "302729982612":
       amiid: "ami-08bb13b38534c6abe"
-      TPS: 5
+      InstanceCount: 5
     "616166470581":
       amiid: "ami-08bb13b38534c6abe"
-      TPS: 5
+      InstanceCount: 5
     "100106417351":
       amiid: "ami-08bb13b38534c6abe"
-      TPS: 5
+      InstanceCount: 5
 
 
 Parameters:
@@ -103,10 +103,8 @@ Resources:
         TagSpecifications:
           - ResourceType: "instance"
             Tags:
-              - Key: "OdinSon"
-                Value: "ThunderLoadTest"
               - Key: "Name"
-                Value: "Smoke LoadTest"
+                Value: "ChimeSDKMeetingsLoadTest"
         DisableApiTermination: 'false'
         ImageId: !FindInMap
           - AccountsMap
@@ -127,5 +125,5 @@ Resources:
         TotalTargetCapacity: !FindInMap
           - AccountsMap
           - !Ref 'AWS::AccountId'
-          - TPS
+          - InstanceCount
         DefaultTargetCapacityType: "on-demand"
