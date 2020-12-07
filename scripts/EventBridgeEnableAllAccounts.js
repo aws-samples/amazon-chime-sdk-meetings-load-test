@@ -2,11 +2,10 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const shell = require('shelljs');
 import accountMap from '../configs/AccountMap.js';
-const { exec } = require('child_process');
 
 for (const [role, accNumber] of Object.entries(accountMap)) {
-  console.log('Enabling Event Bridge E2ECommenceFeeding for Account Number: ', accNumber);
-  let cmd = `cd ~/cli/src/UCBuzzCliTools/bin/ && CONTINGENT_AUTH=1 ./isencreds -a ${accNumber} -r us-east-1 -o ${role}`;
+  console.log('Disabling Event rule E2ECommenceFeeding for Account Number: ', accNumber);
+  let cmd = `CONTINGENT_AUTH=1  ~/cli/src/UCBuzzCliTools/bin/isencreds -a ${accNumber} -r us-east-1 -o ${role}`;
   shell.exec(cmd);
   shell.exec(`aws events enable-rule --name E2ECommenceFeeding`);
 }

@@ -4,11 +4,22 @@ const shell = require('shelljs');
 const { exec } = require('child_process');
 const fs = require('fs');
 
+const file = '../configs/LoadTestStatus.json';
+
+const rawData = fs.readFileSync(file);
+const jsonData = JSON.parse(rawData);
+let newLoadTestSessionIdNumber = 0;
+if(jsonData.hasOwnProperty('LoadTestSessionId')) {
+  const loadTestSessionId = jsonData.LoadTestSessionId.toString();
+  const loadTestSessionNumber = loadTestSessionId.split('-').length > 1 ? loadTestSessionId.split('-').pop() : undefined;
+  newLoadTestSessionIdNumber = loadTestSessionNumber ? parseInt(loadTestSessionNumber) + 1 : 0;
+}
+
 const data = JSON.stringify({
   LoadTestStatus: 'Active',
+  LoadTestSessionId: 'LoadTest-' + newLoadTestSessionIdNumber
 });
 
-const file = '../configs/LoadTestStatus.json';
 
 try {
   fs.writeFileSync(file, data);
@@ -17,7 +28,7 @@ try {
   console.log(err);
 }
 
-let cmd = `cd ~/cli/src/UCBuzzCliTools/bin/ && CONTINGENT_AUTH=1 ./isencreds -a 306496942465 -r us-east-1 -o aws-uc-loadtest-gamma-iad-001-admin`;
+let cmd = `CONTINGENT_AUTH=1  ~/cli/src/UCBuzzCliTools/bin/isencreds -a 306496942465 -r us-east-1 -o aws-uc-loadtest-gamma-iad-001-admin`;
 shell.exec(cmd);
 shell.exec(`aws s3api create-bucket --bucket chimesdkmeetingsloadtest --region us-east-1`);
 shell.exec(`aws s3api put-object --bucket chimesdkmeetingsloadtest --key src/`);

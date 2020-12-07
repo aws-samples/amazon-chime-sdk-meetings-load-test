@@ -90,22 +90,20 @@ export default class SQSOperations {
     const params = {
       QueueUrl: this.SQS_QUEUE_URL,
       MaxNumberOfMessages: 10,
-      VisibilityTimeout: 30,
+      VisibilityTimeout: 300,
     };
-    const CreateMeetingWithAttendeesBodyList = [];
-    const CreateMeetingWithAttendeesBody = await sqs.receiveMessage(params).promise();
-    return CreateMeetingWithAttendeesBody;
-
-    if (CreateMeetingWithAttendeesBody && CreateMeetingWithAttendeesBody.Messages) {
-      for (let msg = 0; msg < CreateMeetingWithAttendeesBody.Messages.length; msg++) {
+    const createMeetingWithAttendeesBody = await sqs.receiveMessage(params).promise();
+    console.log('CreateMeetingWithAttendeesBody' , createMeetingWithAttendeesBody);
+    if (createMeetingWithAttendeesBody && createMeetingWithAttendeesBody.Messages) {
+      for (let msg = 0; msg < createMeetingWithAttendeesBody.Messages.length; msg++) {
         const deleteParams = {
           QueueUrl: this.SQS_QUEUE_URL,
-          ReceiptHandle: CreateMeetingWithAttendeesBody.Messages[msg].ReceiptHandle,
+          ReceiptHandle: createMeetingWithAttendeesBody.Messages[msg].ReceiptHandle,
         };
         await sqs.deleteMessage(deleteParams).promise();
       }
     }
-    return CreateMeetingWithAttendeesBody;
+    return createMeetingWithAttendeesBody;
   }
 
   async purgeMessageQueue() {
