@@ -6,7 +6,6 @@ export default class ConfigParameter {
   constructor() {
     this.launcherArgs = minimist(process.argv.slice(2));
     this.validateConfigParameters();
-    //console.log(this.launcherArgs);
   }
 
   getConfigParameters() {

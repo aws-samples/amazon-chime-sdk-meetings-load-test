@@ -39,18 +39,11 @@ export default class PageActivity {
           '&loadTestSessionName=' +
           this.loadTestName;
 
-        console.log(workerData.sharedConfigParameters);
+        url += '&meetingInfo=' +
+          encodeURIComponent(JSON.stringify(meetingInfo)) +
+          '&attendeeInfo=' +
+          encodeURIComponent(JSON.stringify(attendeeInfo));
 
-
-        if(this.sessionPasscode !== 0) {
-          url += '&Passcode=' +
-            this.sessionPasscode;
-        } else {
-          url += '&meetingInfo=' +
-            encodeURIComponent(JSON.stringify(meetingInfo)) +
-            '&attendeeInfo=' +
-            encodeURIComponent(JSON.stringify(attendeeInfo));
-        }
         this.support.log(url);
         page.setDefaultNavigationTimeout(0);
         const response = page.goto(url);
@@ -85,6 +78,10 @@ export default class PageActivity {
     //if (this.NO_OF_MEETINGS < 30) {
     timeToWaitMS /= 2;
     //}
+
+    if (this.sessionPasscode !== 0) {
+      timeToWaitMS /= 10;
+    }
     return timeToWaitMS;
   }
 

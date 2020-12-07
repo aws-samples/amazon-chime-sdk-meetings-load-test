@@ -102,14 +102,17 @@ export default class ThreadActivity {
         const filename = 'Log_' + accountId + '_' + instanceId;
         this.support.transferFileToS3(filename);
         this.support.putMetricData('ChildThreadActivityComplete', 1);
-        //threads.delete(worker);
-        if (threads.size === 0) {
-          this.support.log('Threads ending');
-          this.support.putMetricData('ThreadExit', 1);
-          this.support.done = 1;
-          const filename = 'Log_' + accountId + '_' + instanceId;
-          this.support.transferFileToS3(filename);
-          console.log(filename);
+        if(this.sharedConfigParameters.sessionPasscode !== 0) {
+          threads.delete(worker);
+          if (threads.size === 0) {
+            this.support.log('Threads ending');
+            this.support.putMetricData('ThreadExit', 1);
+            this.support.done = 1;
+            const filename = 'Log_' + accountId + '_' + instanceId;
+            this.support.transferFileToS3(filename);
+            console.log(filename);
+            process.exit(0);
+          }
         }
       });
     }

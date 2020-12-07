@@ -76,11 +76,6 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }
   }
 
-  // putMetricData(metricName, metricValue, namespace = this.PUT_METRIC_DATA_NAMESPACE) {
-  //   const cmd = `aws cloudwatch put-metric-data --metric-name ${metricName} --dimensions Instance=\`curl http://169.254.169.254/latest/meta-data/instance-id\`  --namespace ${namespace} --value ${metricValue}`;
-  //   exec(cmd);
-  // }
-
   async putMetricData(metricName, metricValue) {
     const instanceId = await this.getInstanceId();
     const startTime = 'MasterThread N/A';

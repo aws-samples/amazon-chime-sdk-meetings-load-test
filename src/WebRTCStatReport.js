@@ -185,7 +185,6 @@ export default class WebRTCStatReport {
         'availableReceiveBandwidth MinMax: ' + threadStatReport.availableReceiveBandwidthMinMax
       );
 
-      console.log(' -------- - - - --------------------- - - - ---------------------');
       console.log('audioDecoderLoss MinMax: ' + rtcStatReport.audioDecoderLossMinMax);
       console.log('audioPacketsReceived MinMax: ' + rtcStatReport.audioPacketsReceivedMinMax);
       console.log(

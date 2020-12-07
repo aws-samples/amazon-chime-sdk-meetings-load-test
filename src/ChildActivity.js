@@ -42,7 +42,6 @@ export default class ChildActivity {
   async openClient(browserActivity, pageActivity) {
     const browser = {};
     const pages = {};
-
     const mapPageMeetingAttendee = new Map();
     for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
       browser[browserTab] = await browserActivity.openBrowser();
@@ -62,8 +61,4 @@ export default class ChildActivity {
     }
     return pages;
   }
-
-
-
-
 }

@@ -1,4 +1,3 @@
-import SQSOperations from './src/SQSOperations.js';
 import ThreadActivity from "./src/ThreadActivity.js";
 import ChildActivity from "./src/ChildActivity.js";
 import MeetingActivity from "./src/MeetingActivity.js";
@@ -24,14 +23,13 @@ export default class ClientLauncher {
     this.NO_OF_MEETINGS = launcherArgs.meetingCount || this.support.getNoOfMeetingsBasedOnCoreSize();
     this.NO_OF_THREADS = launcherArgs.noOfThreads || this.support.getNoOThreadsBasedOnCoreSize();
     this.NO_ATTENDEES_PER_MEETING = launcherArgs.attendeesPerMeeting || 10;
-    this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1800000;
-    this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 1850000;
+    this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 20000; //1800000;
+    this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 25000; //1850000;
     this.METRIC_GRAB_FREQUENCY = launcherArgs.metricGrabFrequencyMin * 60 * 1000 || 1000;
     this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'LoadTest';
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
     this.SESSION_PASSCODE = launcherArgs.sessionPasscode || 0;
     this.run();
-    this.done = 0;
   }
 
   async run() {
@@ -41,14 +39,19 @@ export default class ClientLauncher {
       const noOfMeetings = this.NO_OF_MEETINGS;
       const noOfAttendeesPerMeeting = this.NO_ATTENDEES_PER_MEETING;
       const threads = new Set();
-      const sqs = new SQSOperations();
-      await sqs.init('E2ELoadTestStack-ResponseQueue');
+      let meetingAttendeeArray = null;
       const sharedConfigParameters = this.getSharedConfigParameters();
       const threadActivity = new ThreadActivity(sharedConfigParameters, this.support);
-      const meetingActivity = new MeetingActivity(this.support, noOfMeetings, noOfAttendeesPerMeeting, sqs);
+      const meetingActivity = new MeetingActivity(this.support, noOfMeetings, noOfAttendeesPerMeeting);
       this.support.log('ThreadCount: ' + threadCount);
-      this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
-      let meetingAttendeeArray = await meetingActivity.createMeetingAttendeeList();
+      if (this.SESSION_PASSCODE === 0) {
+        this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
+        meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromSQS('E2ELoadTestStack-ResponseQueue');
+      } else {
+        this.support.log('No Of Attendees: ' + this.NO_ATTENDEES_PER_MEETING);
+        meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE, this.NO_ATTENDEES_PER_MEETING);
+      }
+
       if (meetingAttendeeArray.length > 0) {
         const loadTestStartTimeStampEpoch = Date.now();
         this.support.log('MeetingAttendeeArrayLength ' + meetingAttendeeArray.length);
@@ -61,9 +64,8 @@ export default class ClientLauncher {
         );
         threadActivity.setWorkerThreadEvents(threads);
       }
+      meetingAttendeeArray = [];
     } else {
-      console.log('this.SESSION_PASSCODE ClientLauncher', this.SESSION_PASSCODE);
-      console.log('this.MIN_ACTIVE_TIME_MS ClientLauncher', this.MIN_ACTIVE_TIME_MS);
       const childActivity = new ChildActivity(this.support);
       await childActivity.childThreadActivity();
     }
@@ -321,3 +323,7 @@ export default class ClientLauncher {
 }
 
 new ClientLauncher();
+// setInterval(async () => {
+//   new ClientLauncher();
+// }, 40000);
+

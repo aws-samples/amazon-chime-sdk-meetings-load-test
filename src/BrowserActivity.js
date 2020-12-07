@@ -14,9 +14,9 @@ export default class BrowserActivity {
       .launch({
         headless: true,
         args: [
+          '--use-fake-device-for-media-stream',
           '--use-fake-ui-for-media-stream',
           '--disable-dev-shm-usage',
-          '--use-fake-device-for-media-stream',
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--single-process',
