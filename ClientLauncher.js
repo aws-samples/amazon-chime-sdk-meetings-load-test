@@ -23,8 +23,9 @@ export default class ClientLauncher {
     this.NO_OF_MEETINGS = launcherArgs.meetingCount || this.support.getNoOfMeetingsBasedOnCoreSize();
     this.NO_OF_THREADS = launcherArgs.noOfThreads || this.support.getNoOThreadsBasedOnCoreSize();
     this.NO_ATTENDEES_PER_MEETING = launcherArgs.attendeesPerMeeting || 10;
-    this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 20000; //1800000;
-    this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 25000; //1850000;
+    this.NO_ACTIVE_VIDEO_PER_MEETING = launcherArgs.activeVideosPerMeeting || 0;
+    this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1700000; //1800000;
+    this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 2000000; //1850000;
     this.METRIC_GRAB_FREQUENCY = launcherArgs.metricGrabFrequencyMin * 60 * 1000 || 1000;
     this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'LoadTest';
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
@@ -42,7 +43,7 @@ export default class ClientLauncher {
       let meetingAttendeeArray = null;
       const sharedConfigParameters = this.getSharedConfigParameters();
       const threadActivity = new ThreadActivity(sharedConfigParameters, this.support);
-      const meetingActivity = new MeetingActivity(this.support, noOfMeetings, noOfAttendeesPerMeeting);
+      const meetingActivity = new MeetingActivity(sharedConfigParameters, this.support);
       this.support.log('ThreadCount: ' + threadCount);
       if (this.SESSION_PASSCODE === 0) {
         this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
@@ -311,6 +312,7 @@ export default class ClientLauncher {
         meetingCount: this.NO_OF_MEETINGS,
         noOfThreads: this.NO_OF_THREADS,
         attendeesPerMeeting: this.NO_ATTENDEES_PER_MEETING,
+        activeVideosPerMeeting: this.NO_ACTIVE_VIDEO_PER_MEETING,
         minDurationMin: this.MIN_ACTIVE_TIME_MS,
         maxDurationMin: this.MAX_ACTIVE_TIME_MS,
         metricGrabFrequencyMin: this.METRIC_GRAB_FREQUENCY,

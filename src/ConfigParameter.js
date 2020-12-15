@@ -21,6 +21,7 @@ export default class ConfigParameter {
         meetingCount: 1,
         noOfThreads: 1,
         attendeesPerMeeting: 1,
+        activeVideosPerMeeting: 1,
         minDurationMin: 1,
         maxDurationMin: 1,
         metricGrabFrequencyMin: 1,
@@ -49,6 +50,11 @@ export default class ConfigParameter {
 
       if (launcherArgs.attendeesPerMeeting && typeof launcherArgs.attendeesPerMeeting !== 'number') {
         console.log('Parameter `attendeesPerMeeting` should be of type `number`');
+        process.exit(1);
+      }
+
+      if (launcherArgs.activeVideosPerMeeting && typeof launcherArgs.activeVideosPerMeeting !== 'number') {
+        console.log('Parameter `activeVideosPerMeeting` should be of type `number`');
         process.exit(1);
       }
 

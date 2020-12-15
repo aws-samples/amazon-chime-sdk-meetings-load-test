@@ -108,10 +108,7 @@ export default class ThreadActivity {
             this.support.log('Threads ending');
             this.support.putMetricData('ThreadExit', 1);
             this.support.done = 1;
-            const filename = 'Log_' + accountId + '_' + instanceId;
-            this.support.transferFileToS3(filename);
-            console.log(filename);
-            process.exit(0);
+            process.exit(1);
           }
         }
       });

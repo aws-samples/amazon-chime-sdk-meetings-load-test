@@ -5,10 +5,11 @@ const fetch = require('node-fetch');
 const { v4: uuidv4 } = require('uuid');
 
 export default class MeetingActivity {
-  constructor(support, noOfMeetings, noOfAttendeesPerMeeting) {
+  constructor(sharedConfigParameters, support) {
     this.support = support;
-    this.NO_OF_MEETINGS = noOfMeetings;
-    this.NO_ATTENDEES_PER_MEETING = noOfAttendeesPerMeeting;
+    this.meetingCount = sharedConfigParameters.meetingCount;
+    this.attendeesPerMeeting = sharedConfigParameters.attendeesPerMeeting;
+    this.activeVideosPerMeeting = sharedConfigParameters.activeVideosPerMeeting;
   }
 
   getMeetingsDirectory() {
@@ -25,35 +26,38 @@ export default class MeetingActivity {
   }
 
   async createMeetingAttendeeListFromPasscode (passcode, noOfAttendees) {
-      if (!passcode) {
-        throw new Error('Need parameters: Passcode');
+    if (!passcode) {
+      throw new Error('Need parameters: Passcode');
+    }
+    let meetingAttendeeArray = new Array();
+    let meetingAttendeeListIndex = 0;
+    let activeVideosPerMeeting = Math.min(this.activeVideosPerMeeting, this.attendeesPerMeeting);
+    for (let attendees = 0; attendees < noOfAttendees; attendees += 1) {
+      try {
+        const requestBody = JSON.stringify({
+          Passcode: passcode.toString(),
+          DisplayName: uuidv4(),
+          DeviceId: uuidv4(),
+          DevicePlatform: 'webclient'
+        });
+        const response = await fetch('https://api.express.ue1.app.chime.aws/meetings/v2/anonymous/join_meeting', {
+          method: 'POST',
+          body: requestBody
+        });
+        const bodyJson = await response.json();
+        const meetingAttendeeObject = this.createMeetingAttendeeObject(bodyJson);
+        meetingAttendeeObject.Attendee.VideoEnable = activeVideosPerMeeting > 0 ? true : false
+        activeVideosPerMeeting -= 1;
+        meetingAttendeeArray[meetingAttendeeListIndex] = {
+          Meeting: meetingAttendeeObject.Meeting,
+          Attendees: meetingAttendeeObject.Attendee,
+        };
+        meetingAttendeeListIndex += 1;
+      } catch (err) {
+        console.log('Error while Fetching ', err)
       }
-      let meetingAttendeeArray = new Array();
-      let meetingAttendeeListIndex = 0;
-      for (let attendees = 0; attendees < noOfAttendees; attendees += 1) {
-        try {
-          const requestBody = JSON.stringify({
-            Passcode: passcode.toString(),
-            DisplayName: uuidv4(),
-            DeviceId: uuidv4(),
-            DevicePlatform: 'webclient'
-          });
-          const response = await fetch('https://api.express.ue1.app.chime.aws/meetings/v2/anonymous/join_meeting', {
-            method: 'POST',
-            body: requestBody
-          });
-          const bodyJson = await response.json();
-          const meetingAttendeeObject = this.createMeetingAttendeeObject(bodyJson);
-          meetingAttendeeArray[meetingAttendeeListIndex] = {
-            Meeting: meetingAttendeeObject.Meeting,
-            Attendees: meetingAttendeeObject.Attendee,
-          };
-          meetingAttendeeListIndex += 1;
-        } catch (err) {
-          console.log('Error while Fetching ', err)
-        }
-      }
-      return meetingAttendeeArray;
+    }
+    return meetingAttendeeArray;
   }
 
   async createMeetingAttendeeListFromSQS(sqsName) {
@@ -62,12 +66,13 @@ export default class MeetingActivity {
     let meetingAttendeeArray = new Array();
     let meetingAttendeeListIndex = 0;
     let lastMsgReceivedFromSQS = Date.now();
-    while (meetingAttendeeArray.length < this.NO_OF_MEETINGS * this.NO_ATTENDEES_PER_MEETING) {
+    while (meetingAttendeeArray.length < this.meetingCount * this.attendeesPerMeeting) {
       try {
         const createMeetingWithAttendeesResponses = await sqs.getCreateMeetingWithAttendeesBody();
         if (createMeetingWithAttendeesResponses && createMeetingWithAttendeesResponses.Messages) {
-          for (let response = 0; response < Math.min(this.NO_OF_MEETINGS, createMeetingWithAttendeesResponses.Messages.length); response += 1) {
+          for (let response = 0; response < Math.min(this.meetingCount, createMeetingWithAttendeesResponses.Messages.length); response += 1) {
             const meetingAttendeeInfo = JSON.parse(createMeetingWithAttendeesResponses.Messages[response].Body);
+            let activeVideosPerMeeting = Math.min(this.activeVideosPerMeeting, this.attendeesPerMeeting);
             if (meetingAttendeeInfo &&
               meetingAttendeeInfo.Meeting &&
               meetingAttendeeInfo.Attendees) {
@@ -75,12 +80,16 @@ export default class MeetingActivity {
               const attendeeInfo = meetingAttendeeInfo.Attendees;
               let lock = false;
               for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
-                if (lock === false && meetingAttendeeListIndex < this.NO_OF_MEETINGS * this.NO_ATTENDEES_PER_MEETING) {
+                if (lock === false && meetingAttendeeListIndex < this.meetingCount * this.attendeesPerMeeting) {
                   lock = true;
+
+                  attendeeInfo[attendee].VideoEnable = activeVideosPerMeeting > 0;
+                  activeVideosPerMeeting -= 1;
                   meetingAttendeeArray[meetingAttendeeListIndex] = {
                     Meeting: meetingInfo,
-                    Attendees: attendeeInfo[attendee],
+                    Attendees: attendeeInfo[attendee]
                   };
+
                   this.support.log(meetingAttendeeListIndex + ' ' + JSON.stringify(meetingAttendeeArray[meetingAttendeeListIndex]));
                   lastMsgReceivedFromSQS = Date.now();
                   meetingAttendeeListIndex += 1;

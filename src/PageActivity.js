@@ -8,10 +8,11 @@ import serverlessRestApiForAccountMap from '../configs/ServerlessRestApiAccountM
 export default class PageActivity {
   constructor(support) {
     this.support = support;
-    this.maxDuration = workerData.sharedConfigParameters.maxDurationMin;
-    this.minDuration = workerData.sharedConfigParameters.minDurationMin;
-    this.loadTestName = workerData.sharedConfigParameters.loadTestSessionName;
-    this.sessionPasscode = workerData.sharedConfigParameters.sessionPasscode;
+    const sharedConfigParameters = workerData.sharedConfigParameters;
+    this.maxDuration = sharedConfigParameters.maxDurationMin;
+    this.minDuration = sharedConfigParameters.minDurationMin;
+    this.loadTestName = sharedConfigParameters.loadTestSessionName;
+    this.sessionPasscode = sharedConfigParameters.sessionPasscode;
   }
 
   async openLinkInPage(page, meetingInfo, attendeeInfo, browserTab, noOfRetries = 0) {
@@ -43,6 +44,10 @@ export default class PageActivity {
           encodeURIComponent(JSON.stringify(meetingInfo)) +
           '&attendeeInfo=' +
           encodeURIComponent(JSON.stringify(attendeeInfo));
+
+        if(this.sessionPasscode !== 0) {
+          url += '&setUsingPasscode=true';
+        }
 
         this.support.log(url);
         page.setDefaultNavigationTimeout(0);
