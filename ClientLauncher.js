@@ -13,19 +13,17 @@ require('events').EventEmitter.prototype._maxListeners = Infinity;
 export default class ClientLauncher {
   static FILE_NAME = './ClientLauncher.js';
   static loadTestEndSignal = false;
-  fileLocation = new Map();
-  reportFetch = {};
 
   constructor() {
     this.configParameter = new ConfigParameter();
     const launcherArgs = this.configParameter.getConfigParameters();
-    this.support = new Support();
+    this.support = new Support(!!launcherArgs.localMachine);
     this.NO_OF_MEETINGS = launcherArgs.meetingCount || this.support.getNoOfMeetingsBasedOnCoreSize();
     this.NO_OF_THREADS = launcherArgs.noOfThreads || this.support.getNoOThreadsBasedOnCoreSize();
     this.NO_ATTENDEES_PER_MEETING = launcherArgs.attendeesPerMeeting || 10;
     this.NO_ACTIVE_VIDEO_PER_MEETING = launcherArgs.activeVideosPerMeeting || 0;
-    this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1700000; //1800000;
-    this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 2000000; //1850000;
+    this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1700000;
+    this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 2000000;
     this.METRIC_GRAB_FREQUENCY = launcherArgs.metricGrabFrequencyMin * 60 * 1000 || 1000;
     this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'LoadTest';
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
@@ -138,174 +136,6 @@ export default class ClientLauncher {
     }, 180000);
   }
 
-  async setMeetingTimeout(page, reportFetch) {
-    if (page !== null) {
-      const tabRandomDuration = new Map();
-      for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
-        if (!tabRandomDuration.has(browserTab)) {
-          tabRandomDuration[browserTab] = this.support.getRndDuration(this.MAX_ACTIVE_TIME_MS, this.MIN_ACTIVE_TIME_MS);
-        }
-        setTimeout(async () => {
-          try {
-            if (page[browserTab] !== null) {
-              await this.meetingTimeoutActivity(page, reportFetch, browserTab);
-            }
-          } catch (err) {
-            this.support.error('Failed to end meeting ' + err, browserTab);
-            this.support.putMetricData('MeetingLeaveFail', 1);
-          } finally {
-            page[browserTab] = null;
-          }
-        }, tabRandomDuration[browserTab]);
-      }
-    }
-  }
-
-  async meetingTimeoutActivity(page, reportFetch, browserTab) {
-    this.support.log('Attempting to quit meeting', browserTab);
-    clearInterval(reportFetch[browserTab]);
-    reportFetch[browserTab] = null;
-    const closeStatus = await page[browserTab].evaluate(async () => {
-      return new Promise((resolve, reject) => {
-        try {
-          document.getElementById('button-meeting-leave').click();
-          resolve('Success');
-        } catch (err) {
-          resolve('Fail');
-        }
-      });
-    });
-    if (closeStatus === 'Success') {
-      this.support.log('Tab closed', browserTab);
-      this.support.putMetricData('MeetingLeaveSuccess', 1);
-      await this.closeBrowserTab(
-        page[browserTab],
-        reportFetch[browserTab],
-        browserTab,
-        workerData.threadId
-      );
-    } else {
-      this.support.error('Failed to Leave meeting from the browser ');
-      this.support.putMetricData('MeetingLeaveFail', 1);
-    }
-  }
-
-  async leaveMeeting(page, browserTab) {
-    try {
-      this.support.log('Attempting to quit meeting', browserTab);
-      ClientLauncher.loadTestEndSignal = true;
-      clearInterval(this.reportFetch[browserTab]);
-      this.reportFetch[browserTab] = null;
-      const closeStatus = await page.evaluate(async () => {
-        return new Promise((resolve, reject) => {
-          try {
-            document.getElementById('button-meeting-leave').click();
-            resolve('Success');
-          } catch (err) {
-            resolve('Fail');
-          }
-        });
-      });
-      if (closeStatus === 'Success') {
-        this.support.log('Tab closed', browserTab);
-        this.support.putMetricData('MeetingLeaveSuccess', 1);
-      } else {
-        this.support.error('Failed to Leave meeting from the browser ');
-        this.support.putMetricData('MeetingLeaveFail', 1);
-      }
-    } catch (err) {
-      this.support.error('Failed to end meeting ' + err, browserTab);
-      this.support.putMetricData('MeetingLeaveFail', 1);
-    }
-  }
-
-  async closeBrowserTab(page) {
-    try {
-      if (page !== null) {
-        let localPage = page;
-        page = null;
-        await localPage.close();
-        localPage = null;
-        this.support.log('Close BrowserTab Success ');
-      }
-    } catch (err) {
-      this.support.error('Close BrowserTab failed ' + err);
-    }
-  }
-
-  async closeBrowser(browser, page, waitFactor = 1.5) {
-    if (browser) {
-      setTimeout(async () => {
-        for (const [key, value] of Object.entries(browser)) {
-          if (browser[key] && browser[key].isConnected()) {
-            try {
-              const pages = await browser[key].pages();
-              await this.leaveMeeting(pages[0], key);
-              this.support.log('Close browser initiated');
-              if (typeof this.reportFetch !== 'undefined' && this.reportFetch[key] !== null) {
-                clearInterval(this.reportFetch[key]);
-                this.reportFetch[key] = null;
-              }
-              await pages[0].close();
-            } catch (err) {
-              this.support.error(err);
-            } finally {
-              await browser[key].close();
-              this.support.putMetricData('BrowserClose', 1);
-            }
-          } else {
-            return;
-          }
-        }
-      }, this.MIN_ACTIVE_TIME_MS * waitFactor);
-    }
-  }
-
-  writeMetricsToFile(webRTCStatReport, attendeeId, fileLocation) {
-    let dataToWrite = '';
-    if (typeof webRTCStatReport.audioPacketsReceived !== 'undefined') {
-      dataToWrite += webRTCStatReport.audioPacketsReceived + ',';
-    } else {
-      dataToWrite += ',';
-    }
-    if (typeof webRTCStatReport.audioDecoderLoss !== 'undefined') {
-      dataToWrite += webRTCStatReport.audioDecoderLoss + ',';
-    } else {
-      dataToWrite += ',';
-    }
-    if (typeof webRTCStatReport.audioPacketsReceivedFractionLoss !== 'undefined') {
-      //dataToWrite += Math.min(Math.max(webRTCStatReport.audioPacketsReceivedFractionLoss, 0), 1) + ',';
-      dataToWrite += Math.min(Math.max(webRTCStatReport.audioPacketsReceivedFractionLoss, 0), 1) + ',';
-    } else {
-      dataToWrite += ',';
-    }
-    if (typeof webRTCStatReport.audioSpeakerDelayMs !== 'undefined') {
-      dataToWrite += webRTCStatReport.audioSpeakerDelayMs + ',';
-    } else {
-      dataToWrite += ',';
-    }
-    if (typeof webRTCStatReport.availableSendBandwidth !== 'undefined') {
-      dataToWrite += webRTCStatReport.availableSendBandwidth + ',';
-    } else {
-      dataToWrite += ',';
-    }
-
-    if (dataToWrite !== ',,,,') {
-      try {
-        const timestamp = new Date().toISOString();
-        const dataToWriteToFile = dataToWrite + attendeeId + ',' + timestamp + '\n';
-        fs.appendFile(fileLocation + '.csv', dataToWriteToFile, function (err) {
-          if (err) {
-            console.error('Failed to write due to ', err.message + dataToWriteToFile);
-          }
-          console.log('Saved!' + dataToWriteToFile);
-        });
-      } catch (err) {
-        console.error(err.message);
-      }
-    }
-  }
-
   getSharedConfigParameters() {
     const sharedConfigParameters =
       {
@@ -325,7 +155,3 @@ export default class ClientLauncher {
 }
 
 new ClientLauncher();
-// setInterval(async () => {
-//   new ClientLauncher();
-// }, 40000);
-

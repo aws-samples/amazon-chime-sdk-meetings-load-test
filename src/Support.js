@@ -10,6 +10,11 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 
 export default class Support {
 
+  constructor(isLocalMachine) {
+    this.isLocalMachine = isLocalMachine;
+    console.log(this.isLocalMachine);
+  }
+
   getLoadTestSessionId () {
     const file = './configs/LoadTestStatus.json';
     const rawData = fs.readFileSync(file);
@@ -38,12 +43,18 @@ export default class Support {
   }
 
   async getAccountDetails() {
+    if (this.isLocalMachine) {
+      return 'local_machine';
+    }
     const cmd = `curl -s http://169.254.169.254/latest/dynamic/instance-identity/document`;
     const accountDetails = JSON.parse(await this.runCmdAsync(cmd));
     return accountDetails;
   }
 
   async getInstanceId() {
+    if (this.isLocalMachine) {
+      return 'local_machine';
+    }
     const cmd = `curl http://169.254.169.254/latest/meta-data/instance-id`;
     const instanceId = await this.runCmdAsync(cmd);
     return instanceId;
@@ -77,6 +88,9 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   }
 
   async putMetricData(metricName, metricValue) {
+    if (this.isLocalMachine) {
+      return;
+    }
     const instanceId = await this.getInstanceId();
     const startTime = 'MasterThread N/A';
     const putMetric = metricScope(
@@ -93,9 +107,9 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   getNoOfMeetingsBasedOnCoreSize() {
     const cpuCount = os.cpus().length;
     if (cpuCount >= 36) {
-      return Math.floor(cpuCount * 0.55);
+      return Math.floor(cpuCount * 0.10);
     }
-    return Math.floor(cpuCount * 0.40);
+    return Math.floor(cpuCount * 0.08);
   }
 
   getNoOThreadsBasedOnCoreSize() {

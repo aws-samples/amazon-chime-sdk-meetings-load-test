@@ -12,6 +12,8 @@ Optional parameters:
   - number of threads to be spawned [default = core size]
 - attendeesPerMeeting
   - number of attendees each meeting will have [default = 10]
+- activeVideosPerMeeting
+  - number of attendees that will turn on the video after joining the meeting [default = 0]
 - minDurationMin
   - minimum duration a meeting will be active [default = 20 mins]
 - maxDurationMin
@@ -20,7 +22,11 @@ Optional parameters:
   - frequency at which the the metrics should be fetched from the browser running the localhost client [default = 0.016 min = 1 sec]
 - putMetricDataNamespace
   - name of the namespace to view the metrics
-
+- loadTestSessionName
+  - session name assigned to the load test
+- sessionPasscode
+  - passcode used to set up the anonymous users
+  
 Usage:
 
 ```

@@ -46,13 +46,17 @@ export default class MeetingActivity {
         });
         const bodyJson = await response.json();
         const meetingAttendeeObject = this.createMeetingAttendeeObject(bodyJson);
-        meetingAttendeeObject.Attendee.VideoEnable = activeVideosPerMeeting > 0 ? true : false
-        activeVideosPerMeeting -= 1;
-        meetingAttendeeArray[meetingAttendeeListIndex] = {
-          Meeting: meetingAttendeeObject.Meeting,
-          Attendees: meetingAttendeeObject.Attendee,
-        };
-        meetingAttendeeListIndex += 1;
+        if (meetingAttendeeObject) {
+          meetingAttendeeObject.Attendee.VideoEnable = activeVideosPerMeeting > 0;
+          activeVideosPerMeeting -= 1;
+          meetingAttendeeArray[meetingAttendeeListIndex] = {
+            Meeting: meetingAttendeeObject.Meeting,
+            Attendees: meetingAttendeeObject.Attendee,
+          };
+          meetingAttendeeListIndex += 1;
+        } else {
+          process.exit(1);
+        }
       } catch (err) {
         console.log('Error while Fetching ', err)
       }
@@ -82,14 +86,12 @@ export default class MeetingActivity {
               for (let attendee = 0; attendee < attendeeInfo.length; attendee += 1) {
                 if (lock === false && meetingAttendeeListIndex < this.meetingCount * this.attendeesPerMeeting) {
                   lock = true;
-
                   attendeeInfo[attendee].VideoEnable = activeVideosPerMeeting > 0;
                   activeVideosPerMeeting -= 1;
                   meetingAttendeeArray[meetingAttendeeListIndex] = {
                     Meeting: meetingInfo,
                     Attendees: attendeeInfo[attendee]
                   };
-
                   this.support.log(meetingAttendeeListIndex + ' ' + JSON.stringify(meetingAttendeeArray[meetingAttendeeListIndex]));
                   lastMsgReceivedFromSQS = Date.now();
                   meetingAttendeeListIndex += 1;
@@ -115,23 +117,33 @@ export default class MeetingActivity {
   }
 
   createMeetingAttendeeObject(bodyJson) {
-    const meetingAttendeeObject = {
-      Meeting: {
-        MeetingId: bodyJson.Meeting.JoinableMeeting.Id,
-        MediaPlacement: {
-          AudioHostUrl: bodyJson.Meeting.MediaPlacement.AudioDtlsUrl,
-          SignalingUrl: `${bodyJson.Meeting.MediaPlacement.SignalingUrl}/control/${bodyJson.Meeting.JoinableMeeting.Id}`,
-          TurnControlUrl: bodyJson.Meeting.MediaPlacement.TurnControlUrl,
-          ScreenDataUrl: bodyJson.Meeting.MediaPlacement.ScreenBrowserUrl,
-          ScreenViewingUrl: bodyJson.Meeting.MediaPlacement.ScreenBrowserUrl,
-          ScreenSharingUrl: bodyJson.Meeting.MediaPlacement.ScreenBrowserUrl,
+    if (bodyJson === null) {
+      return null;
+    }
+    let meetingAttendeeObject = null;
+    try {
+      meetingAttendeeObject = {
+        Meeting: {
+          MeetingId: bodyJson.Meeting.JoinableMeeting.Id,
+          MediaPlacement: {
+            AudioHostUrl: bodyJson.Meeting.MediaPlacement.AudioDtlsUrl,
+            SignalingUrl: `${bodyJson.Meeting.MediaPlacement.SignalingUrl}/control/${bodyJson.Meeting.JoinableMeeting.Id}`,
+            TurnControlUrl: bodyJson.Meeting.MediaPlacement.TurnControlUrl,
+            ScreenDataUrl: bodyJson.Meeting.MediaPlacement.ScreenBrowserUrl,
+            ScreenViewingUrl: bodyJson.Meeting.MediaPlacement.ScreenBrowserUrl,
+            ScreenSharingUrl: bodyJson.Meeting.MediaPlacement.ScreenBrowserUrl,
+          }
+        },
+        Attendee: {
+          AttendeeId: bodyJson.Meeting.CurrentAttendee.ProfileId,
+          JoinToken: bodyJson.SessionToken,
         }
-      },
-      Attendee: {
-        AttendeeId: bodyJson.Meeting.CurrentAttendee.ProfileId,
-        JoinToken: bodyJson.SessionToken,
-      }
-    };
+      };
+
+    } catch(err) {
+      console.log('Please check the meeting attendee object generated using the Passcode. Is the meeting active?\n');
+      //process.exit(0);
+    }
     return meetingAttendeeObject;
   }
 }
