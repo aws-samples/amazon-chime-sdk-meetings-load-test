@@ -15,11 +15,14 @@ export default class ClientLauncher {
   static loadTestEndSignal = false;
 
   constructor() {
-    this.configParameter = new ConfigParameter();
+    this.configParameter = new ConfigParameter('launcher');
     const launcherArgs = this.configParameter.getConfigParameters();
-    this.support = new Support(!!launcherArgs.localMachine);
-    this.NO_OF_MEETINGS = launcherArgs.meetingCount || this.support.getNoOfMeetingsBasedOnCoreSize();
-    this.NO_OF_THREADS = launcherArgs.noOfThreads || this.support.getNoOThreadsBasedOnCoreSize();
+    console.log(launcherArgs);
+    this.RUN_FROM_LOCAL_MACHINE = launcherArgs.localMachine || false;
+    console.log(this.RUN_FROM_LOCAL_MACHINE);
+    this.support = new Support(this.RUN_FROM_LOCAL_MACHINE, launcherArgs.loadTestSessionName);
+    this.NO_OF_MEETINGS = launcherArgs.meetingCount || Math.max(1, this.support.getNoOfMeetingsBasedOnCoreSize());
+    this.NO_OF_THREADS = launcherArgs.noOfThreads || Math.max(1, this.support.getNoOThreadsBasedOnCoreSize());
     this.NO_ATTENDEES_PER_MEETING = launcherArgs.attendeesPerMeeting || 10;
     this.NO_ACTIVE_VIDEO_PER_MEETING = launcherArgs.activeVideosPerMeeting || 0;
     this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1700000;
@@ -28,6 +31,10 @@ export default class ClientLauncher {
     this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'LoadTest';
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
     this.SESSION_PASSCODE = launcherArgs.sessionPasscode || 0;
+    this.generateMeetingAttendeeAfterBrowserLoad = false;
+    if (launcherArgs.meetingCount === 1 && launcherArgs.attendeesPerMeeting > 10 && this.SESSION_PASSCODE === 0) {
+      this.generateMeetingAttendeeAfterBrowserLoad = true;
+    }
     this.run();
   }
 
@@ -35,105 +42,36 @@ export default class ClientLauncher {
     if (isMainThread) {
       this.support.putMetricData('LauncherRunning', 500);
       const threadCount = this.NO_OF_THREADS;
-      const noOfMeetings = this.NO_OF_MEETINGS;
-      const noOfAttendeesPerMeeting = this.NO_ATTENDEES_PER_MEETING;
       const threads = new Set();
       let meetingAttendeeArray = null;
       const sharedConfigParameters = this.getSharedConfigParameters();
       const threadActivity = new ThreadActivity(sharedConfigParameters, this.support);
       const meetingActivity = new MeetingActivity(sharedConfigParameters, this.support);
       this.support.log('ThreadCount: ' + threadCount);
-      if (this.SESSION_PASSCODE === 0) {
-        this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
-        meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromSQS('E2ELoadTestStack-ResponseQueue');
-      } else {
-        this.support.log('No Of Attendees: ' + this.NO_ATTENDEES_PER_MEETING);
-        meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE, this.NO_ATTENDEES_PER_MEETING);
-      }
-
-      if (meetingAttendeeArray.length > 0) {
-        const loadTestStartTimeStampEpoch = Date.now();
+      if (!this.generateMeetingAttendeeAfterBrowserLoad) {
+        if (this.SESSION_PASSCODE === 0) {
+          this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
+          meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromSQS('E2ELoadTestStack-ResponseQueue');
+        } else {
+          this.support.log('No Of Attendees: ' + this.NO_ATTENDEES_PER_MEETING);
+          meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE, this.NO_ATTENDEES_PER_MEETING);
+        }
         this.support.log('MeetingAttendeeArrayLength ' + meetingAttendeeArray.length);
         this.support.putMetricData('MeetingAttendeeArrayLength', meetingAttendeeArray.length);
-        await threadActivity.spawnThreads(
-          meetingAttendeeArray,
-          threadCount,
-          threads,
-          loadTestStartTimeStampEpoch
-        );
-        threadActivity.setWorkerThreadEvents(threads);
       }
-      meetingAttendeeArray = [];
+      const loadTestStartTimeStampEpoch = Date.now();
+      await threadActivity.spawnThreads(
+        meetingAttendeeArray,
+        threadCount,
+        threads,
+        loadTestStartTimeStampEpoch
+      );
+      threadActivity.setWorkerThreadEvents(threads);
+
     } else {
       const childActivity = new ChildActivity(this.support);
       await childActivity.childThreadActivity();
     }
-  }
-
-  async startMeetingSession(page, meetingInfo, attendeeInfo, browserTab, threadId) {
-    if (workerData.threadId === threadId && page !== null) {
-      try {
-        const meetingId = meetingInfo.MeetingId;
-        const attendeeId = attendeeInfo.AttendeeId;
-        if (page !== null) {
-          const meetingStartStatus = await page.evaluate(
-            (attendeeId, meetingId, browserTab) => {
-              return new Promise((resolve, reject) => {
-                try {
-                  document.getElementById('inputMeeting').value = meetingId;
-                  document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendeeId;
-                  document.getElementById('authenticate').click();
-                  resolve('Success');
-                } catch (err) {
-                  resolve('Fail');
-                }
-              });
-            }, attendeeId, meetingId, browserTab);
-
-          if (meetingStartStatus === 'Success') {
-            this.support.log('Meeting start SUCCESS on tab # ', browserTab);
-            this.support.putMetricData('MeetingStartSuccess', 1);
-          } else {
-            this.support.log('Meeting start FAIL on tab # ', browserTab);
-            this.support.putMetricData('MeetingStartFail', 1);
-          }
-        }
-      } catch (err) {
-        this.support.error('Exception on page evaluate ' + err, browserTab);
-        this.support.putMetricData('MeetingStartFailPageEvaluate', 1);
-      }
-    }
-  }
-
-  async fetchMetricsFromBrowser(page) {
-    setTimeout(() => {
-      for (const [key, value] of Object.entries(page)) {
-        this.reportFetch[key] = setInterval(async () => {
-          this.support.putMetricData('Beacon-' + workerData.threadId, 1);
-          try {
-            if (page[key] !== null) {
-              const metricReport = await page[key].evaluate(() => app.metricReport);
-              if (
-                metricReport.meetingId || metricReport.attendeeId || metricReport.audioDecoderLoss || metricReport.audioPacketsReceived || metricReport.audioPacketsReceivedFractionLoss || metricReport.audioSpeakerDelayMs || metricReport.availableReceiveBandwidth || metricReport.availableSendBandwidth
-              ) {
-                const bodyHTML = await page[key].evaluate(() => document.body.innerText);
-                this.support.log(bodyHTML);
-                this.writeMetricsToFile(metricReport, metricReport.attendeeId, workerData.meetingsDirectory + '/' + metricReport.meetingId);
-              } else {
-                this.support.log('Metrics not received');
-                this.support.putMetricData('MeetingInactive', 1);
-                const bodyHTML = await page[key].evaluate(() => document.body.innerText);
-                this.support.log(bodyHTML);
-              }
-            } else {
-              this.support.log('Failed Metrics Reading');
-            }
-          } catch (err) {
-            this.support.error('Cannot retrieve Metrics from browser meeting ' + err.message);
-          }
-        }, this.METRIC_GRAB_FREQUENCY);
-      }
-    }, 180000);
   }
 
   getSharedConfigParameters() {
@@ -148,7 +86,8 @@ export default class ClientLauncher {
         metricGrabFrequencyMin: this.METRIC_GRAB_FREQUENCY,
         putMetricDataNamespace: this.PUT_METRIC_DATA_NAMESPACE,
         loadTestSessionName: this.LOADTEST_SESSION_NAME,
-        sessionPasscode: this.SESSION_PASSCODE
+        sessionPasscode: this.SESSION_PASSCODE,
+        isLocalMachine: this.RUN_FROM_LOCAL_MACHINE
       };
     return sharedConfigParameters;
   }

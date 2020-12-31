@@ -13,6 +13,7 @@ export default class PageActivity {
     this.minDuration = sharedConfigParameters.minDurationMin;
     this.loadTestName = sharedConfigParameters.loadTestSessionName;
     this.sessionPasscode = sharedConfigParameters.sessionPasscode;
+    this.activeVideosPerMeeting = sharedConfigParameters.activeVideosPerMeeting;
   }
 
   async openLinkInPage(page, meetingInfo, attendeeInfo, browserTab, noOfRetries = 0) {
@@ -23,10 +24,14 @@ export default class PageActivity {
     }
     if (page && page !== null) {
       try {
-        const timeToWaitMS = this.getTimeToWaitMS();
+        let timeToWaitMS = this.support.getRndDuration(1000, 30000);
         const meetingLeaveAfterMs = timeToWaitMS + this.support.getRndDuration(this.maxDuration, this.minDuration);
         //const serverlessRestApi = this.getServerlessRestApiForAccount(workerData.accountId);
         //const url = 'https://' + serverlessRestApi + '.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingLeaveAfterMs=' + meetingLeaveAfterMs + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
+
+        if (meetingInfo !== null && attendeeInfo!== null) {
+          timeToWaitMS = this.getTimeToWaitMS();
+        }
 
         let url =
           'http://127.0.0.1:8080/?timeToWaitMS=' +
@@ -40,10 +45,14 @@ export default class PageActivity {
           '&loadTestSessionName=' +
           this.loadTestName;
 
-        url += '&meetingInfo=' +
-          encodeURIComponent(JSON.stringify(meetingInfo)) +
-          '&attendeeInfo=' +
-          encodeURIComponent(JSON.stringify(attendeeInfo));
+        if (meetingInfo !== null && attendeeInfo!== null) {
+          url += '&meetingInfo=' +
+            encodeURIComponent(JSON.stringify(meetingInfo)) +
+            '&attendeeInfo=' +
+            encodeURIComponent(JSON.stringify(attendeeInfo));
+        } else if (this.activeVideosPerMeeting > 0) {
+          url += '&videoEnable=true';
+        }
 
         if(this.sessionPasscode !== 0) {
           url += '&setUsingPasscode=true';

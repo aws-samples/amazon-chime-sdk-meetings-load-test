@@ -15,7 +15,6 @@ export default class ChildActivity {
 
   async childThreadActivity() {
     const webRTCStatReport = {};
-    if (workerData.meetingAttendeeList) {
       const browserActivity = new BrowserActivity(this.support);
       const pageActivity = new PageActivity(this.support);
       const pages = await this.openClient(browserActivity, pageActivity);
@@ -36,7 +35,6 @@ export default class ChildActivity {
           accountId: workerData.accountId,
         });
       }
-    }
   }
 
   async openClient(browserActivity, pageActivity) {
@@ -45,10 +43,10 @@ export default class ChildActivity {
     const mapPageMeetingAttendee = new Map();
     for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
       browser[browserTab] = await browserActivity.openBrowser();
-      const meetingInfo = workerData.meetingAttendeeList[browserTab].Meeting;
-      const attendeeInfo = workerData.meetingAttendeeList[browserTab].Attendees;
+      const meetingInfo = workerData.meetingAttendeeList ? workerData.meetingAttendeeList[browserTab].Meeting : null;
+      const attendeeInfo = workerData.meetingAttendeeList ? workerData.meetingAttendeeList[browserTab].Attendees : null;
       mapPageMeetingAttendee[(workerData.threadId, browserTab)] = { meetingInfo, attendeeInfo };
-      if (browser[browserTab] !== null && meetingInfo && attendeeInfo) {
+      if (browser[browserTab] !== null) {
         pages[browserTab] = await pageActivity.createNewPage(
           browser[browserTab],
           browserTab,

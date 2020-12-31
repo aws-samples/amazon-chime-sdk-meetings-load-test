@@ -3,19 +3,18 @@ const require = createRequire(import.meta.url);
 const minimist = require('minimist');
 
 export default class ConfigParameter {
-  constructor() {
-    this.launcherArgs = minimist(process.argv.slice(2));
-    this.validateConfigParameters();
+  constructor(caller) {
+    this.configParameters = minimist(process.argv.slice(2));
+    caller === 'launcher' ? this.validateLauncherConfigParameters() : this.validateResultViewerConfigParameters();
   }
 
   getConfigParameters() {
-    return this.launcherArgs;
+    return this.configParameters;
   }
 
-  validateConfigParameters() {
-    const launcherArgs = this.launcherArgs;
+  validateLauncherConfigParameters() {
+    const launcherArgs = this.configParameters;
     if (Object.keys(launcherArgs).length > 1) {
-      //const expectedParameters = ['_', 'meetingCount', 'noOfThreads', 'attendeesPerMeeting', 'minDurationMin', 'maxDurationMin', 'metricGrabFrequencyMin'];
       const expectedParameters = {
         _: typeof [],
         meetingCount: 'number',
@@ -38,7 +37,7 @@ export default class ConfigParameter {
           process.exit(1);
         }
 
-        if (typeof paramType !== expectedParameters[paramName] && paramName !== 'localMachine') {
+        if (typeof paramType !== expectedParameters[paramName]) {
           console.log(`Parameter '${paramName}' should be of type '${expectedParameters[paramName]}'`);
           process.exit(1);
         }
@@ -51,5 +50,9 @@ export default class ConfigParameter {
         }
       }
     }
+  }
+
+  validateResultViewerConfigParameters() {
+
   }
 }

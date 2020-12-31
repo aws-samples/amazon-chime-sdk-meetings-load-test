@@ -10,9 +10,14 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 
 export default class Support {
 
-  constructor(isLocalMachine) {
-    this.isLocalMachine = isLocalMachine;
-    console.log(this.isLocalMachine);
+  constructor(isLocalMachine, loadTestSessionId) {
+    if (isMainThread) {
+      this.isLocalMachine = isLocalMachine;
+    } else {
+      this.isLocalMachine = workerData.sharedConfigParameters.isLocalMachine;
+    }
+    console.log('isLocalMachine', this.isLocalMachine);
+    this.LOADTEST_SESSION_NAME = loadTestSessionId || this.getLoadTestSessionId();
   }
 
   getLoadTestSessionId () {
@@ -93,6 +98,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     }
     const instanceId = await this.getInstanceId();
     const startTime = 'MasterThread N/A';
+    metricScope.logGroupName = "LoadTest_Metrics";
     const putMetric = metricScope(
       (metrics) => async (instanceId, startTime, metricName, metricValue) => {
         console.log('received message');

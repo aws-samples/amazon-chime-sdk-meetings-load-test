@@ -10,7 +10,7 @@ export default class ThreadActivity {
   }
 
   async spawnThreads(meetingAttendeeList, threadCount, threads, loadTestStartTimeStampEpoch) {
-    const max = meetingAttendeeList.length;
+    const max = meetingAttendeeList?.length || this.sharedConfigParameters.attendeesPerMeeting;
     const min = 0;
     console.log(`Running with ${threadCount} threads...`);
     let start = min;
