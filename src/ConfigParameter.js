@@ -27,7 +27,8 @@ export default class ConfigParameter {
         putMetricDataNamespace: 'string',
         loadTestSessionName: 'string',
         sessionPasscode: 'number',
-        localMachine: 'boolean'
+        localMachine: 'boolean',
+        generateMultipleAttendeesForAMeeting: 'boolean'
       };
 
       for (let [paramName, paramType] of Object.entries(launcherArgs)) {

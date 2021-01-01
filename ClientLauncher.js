@@ -17,9 +17,8 @@ export default class ClientLauncher {
   constructor() {
     this.configParameter = new ConfigParameter('launcher');
     const launcherArgs = this.configParameter.getConfigParameters();
-    console.log(launcherArgs);
     this.RUN_FROM_LOCAL_MACHINE = launcherArgs.localMachine || false;
-    console.log(this.RUN_FROM_LOCAL_MACHINE);
+    this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS = launcherArgs.generateMultipleAttendeesForAMeeting || false;
     this.support = new Support(this.RUN_FROM_LOCAL_MACHINE, launcherArgs.loadTestSessionName);
     this.NO_OF_MEETINGS = launcherArgs.meetingCount || Math.max(1, this.support.getNoOfMeetingsBasedOnCoreSize());
     this.NO_OF_THREADS = launcherArgs.noOfThreads || Math.max(1, this.support.getNoOThreadsBasedOnCoreSize());
@@ -32,6 +31,10 @@ export default class ClientLauncher {
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
     this.SESSION_PASSCODE = launcherArgs.sessionPasscode || 0;
     this.generateMeetingAttendeeAfterBrowserLoad = false;
+    if (this.NO_ACTIVE_VIDEO_PER_MEETING > this.NO_ATTENDEES_PER_MEETING) {
+      this.NO_ACTIVE_VIDEO_PER_MEETING = this.NO_ATTENDEES_PER_MEETING;
+      console.log('Number of active video tiles cannot be greater than number of participants, setting NO_ACTIVE_VIDEO_PER_MEETING = NO_ATTENDEES_PER_MEETING');
+    }
     if (launcherArgs.meetingCount === 1 && launcherArgs.attendeesPerMeeting > 10 && this.SESSION_PASSCODE === 0) {
       this.generateMeetingAttendeeAfterBrowserLoad = true;
     }
@@ -48,13 +51,17 @@ export default class ClientLauncher {
       const threadActivity = new ThreadActivity(sharedConfigParameters, this.support);
       const meetingActivity = new MeetingActivity(sharedConfigParameters, this.support);
       this.support.log('ThreadCount: ' + threadCount);
-      if (!this.generateMeetingAttendeeAfterBrowserLoad) {
+
+      if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS) {
+        meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(null);
+        console.log(meetingAttendeeArray);
+      } else if (!this.generateMeetingAttendeeAfterBrowserLoad) {
         if (this.SESSION_PASSCODE === 0) {
           this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
           meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromSQS('E2ELoadTestStack-ResponseQueue');
         } else {
           this.support.log('No Of Attendees: ' + this.NO_ATTENDEES_PER_MEETING);
-          meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE, this.NO_ATTENDEES_PER_MEETING);
+          meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE);
         }
         this.support.log('MeetingAttendeeArrayLength ' + meetingAttendeeArray.length);
         this.support.putMetricData('MeetingAttendeeArrayLength', meetingAttendeeArray.length);

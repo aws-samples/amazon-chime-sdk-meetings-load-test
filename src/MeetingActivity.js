@@ -1,8 +1,11 @@
 import {createRequire} from 'module';
 import SQSOperations from './SQSOperations.js';
+
 const require = createRequire(import.meta.url);
 const fetch = require('node-fetch');
 const { v4: uuidv4 } = require('uuid');
+const AWS = require('aws-sdk');
+AWS.config.region = 'us-east-1';
 
 export default class MeetingActivity {
   constructor(sharedConfigParameters, support) {
@@ -25,49 +28,62 @@ export default class MeetingActivity {
     return meetingsDirectory;
   }
 
-  async createMeetingAttendeeListFromPasscode (passcode, noOfAttendees) {
+  async createAMeetingMultipleAttendeesList(meetingId) {
+    const chime = new AWS.Chime({ region: 'us-east-1' });
+    // Set the AWS SDK Chime endpoint to prod as per requirement: https://service.chime.aws.amazon.com.
+    chime.endpoint = new AWS.Endpoint('https://tapioca.us-east-1.amazonaws.com');
+    let meeting = null;
+    if (meetingId === null) {
+      meeting = await chime.createMeeting({
+        ClientRequestToken: uuidv4(),
+        MediaRegion: AWS.config.region,
+        ExternalMeetingId: uuidv4().substring(0, 64),
+      }).promise();
+      meetingId = meeting.Meeting.MeetingId;
+    }
+    const attendeesBatch = [];
+    for (let attendee = 0; attendee < this.attendeesPerMeeting; attendee += 1) {
+      attendeesBatch.push({ExternalUserId: uuidv4().substring(0, 64)})
+    }
+    const batchCreateAttendee = await chime.batchCreateAttendee({
+      MeetingId: meetingId,
+      Attendees: attendeesBatch
+    }).promise();
+
+    return await this.createMeetingAttendeeList(meeting, batchCreateAttendee);
+  }
+
+  async createMeetingAttendeeList(meeting, attendees) {
+    console.log(meeting);
+    const attendeesList = attendees?.Attendees;
+    const meetingAttendeeArray = [];
+    let meetingAttendeeListIndex = 0;
+    let activeVideosPerMeeting = Math.min(this.activeVideosPerMeeting, this.attendeesPerMeeting);
+    for (let attendeeIndex = 0; attendeeIndex < attendeesList?.length; attendeeIndex += 1) {
+      attendeesList[attendeeIndex].VideoEnable = activeVideosPerMeeting > 0;
+      activeVideosPerMeeting -= 1;
+      meetingAttendeeArray[meetingAttendeeListIndex] = {
+        Meeting: meeting.Meeting,
+        Attendees: attendeesList[attendeeIndex],
+      };
+      meetingAttendeeListIndex += 1;
+    }
+    console.log(meetingAttendeeArray);
+    return meetingAttendeeArray;
+  }
+
+
+  async createMeetingAttendeeListFromPasscode(passcode, noOfAttendees) {
     if (!passcode) {
       throw new Error('Need parameters: Passcode');
     }
-    let meetingAttendeeArray = new Array();
-    let meetingAttendeeListIndex = 0;
-    let activeVideosPerMeeting = Math.min(this.activeVideosPerMeeting, this.attendeesPerMeeting);
-    for (let attendees = 0; attendees < noOfAttendees; attendees += 1) {
-      try {
-        const requestBody = JSON.stringify({
-          Passcode: passcode.toString(),
-          DisplayName: uuidv4(),
-          DeviceId: uuidv4(),
-          DevicePlatform: 'webclient'
-        });
-        const response = await fetch('https://api.express.ue1.app.chime.aws/meetings/v2/anonymous/join_meeting', {
-          method: 'POST',
-          body: requestBody
-        });
-        const bodyJson = await response.json();
-        const meetingAttendeeObject = this.createMeetingAttendeeObject(bodyJson);
-        if (meetingAttendeeObject) {
-          meetingAttendeeObject.Attendee.VideoEnable = activeVideosPerMeeting > 0;
-          activeVideosPerMeeting -= 1;
-          meetingAttendeeArray[meetingAttendeeListIndex] = {
-            Meeting: meetingAttendeeObject.Meeting,
-            Attendees: meetingAttendeeObject.Attendee,
-          };
-          meetingAttendeeListIndex += 1;
-        } else {
-          process.exit(1);
-        }
-      } catch (err) {
-        console.log('Error while Fetching ', err)
-      }
-    }
-    return meetingAttendeeArray;
+    return await this.getMeetingAttendeeListFromExpress(passcode, noOfAttendees);
   }
 
   async createMeetingAttendeeListFromSQS(sqsName) {
     const sqs = new SQSOperations();
     await sqs.init(sqsName);
-    let meetingAttendeeArray = new Array();
+    let meetingAttendeeArray = [];
     let meetingAttendeeListIndex = 0;
     let lastMsgReceivedFromSQS = Date.now();
     while (meetingAttendeeArray.length < this.meetingCount * this.attendeesPerMeeting) {
@@ -116,7 +132,7 @@ export default class MeetingActivity {
     return meetingAttendeeArray;
   }
 
-  createMeetingAttendeeObject(bodyJson) {
+  createMeetingAttendeeObjectFromExpressResponse(bodyJson) {
     if (bodyJson === null) {
       return null;
     }
@@ -145,5 +161,41 @@ export default class MeetingActivity {
       //process.exit(0);
     }
     return meetingAttendeeObject;
+  }
+
+  async getMeetingAttendeeListFromExpress(passcode) {
+    const meetingAttendeeArray = [];
+    let activeVideosPerMeeting = Math.min(this.activeVideosPerMeeting, this.attendeesPerMeeting);
+    let meetingAttendeeListIndex = 0;
+    for (let attendees = 0; attendees < this.attendeesPerMeeting; attendees += 1) {
+      try {
+        const requestBody = JSON.stringify({
+          Passcode: passcode.toString(),
+          DisplayName: uuidv4(),
+          DeviceId: uuidv4(),
+          DevicePlatform: 'webclient'
+        });
+        const response = await fetch('https://api.express.ue1.app.chime.aws/meetings/v2/anonymous/join_meeting', {
+          method: 'POST',
+          body: requestBody
+        });
+        const bodyJson = await response.json();
+        const meetingAttendeeObject = this.createMeetingAttendeeObjectFromExpressResponse(bodyJson);
+        if (meetingAttendeeObject) {
+          meetingAttendeeObject.Attendee.VideoEnable = activeVideosPerMeeting > 0;
+          activeVideosPerMeeting -= 1;
+          meetingAttendeeArray[meetingAttendeeListIndex] = {
+            Meeting: meetingAttendeeObject.Meeting,
+            Attendees: meetingAttendeeObject.Attendee,
+          };
+          meetingAttendeeListIndex += 1;
+        } else {
+          console.log('meetingAttendeeObject could not be created, exiting... ')
+          process.exit(1);
+        }
+      } catch (err) {
+        console.error('Error while Fetching ', err)
+      }
+    }
   }
 }
