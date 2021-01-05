@@ -54,6 +54,31 @@ export default class ConfigParameter {
   }
 
   validateResultViewerConfigParameters() {
+    const resultViewerArgs = this.configParameters;
+    if (Object.keys(resultViewerArgs).length > 1) {
+      const expectedParameters = {
+        _: typeof [],
+        logGroupName: 'string',
+        startTime: 'number',
+        endTime: 'number',
+        region: 'string',
+        sessionId: 'string'
+      };
 
+      for (let [paramName, paramType] of Object.entries(resultViewerArgs)) {
+        if (!(paramName in expectedParameters)) {
+          console.log('Please check entered parameters');
+          console.log('Expected parameters: ', expectedParameters);
+          process.exit(1);
+        }
+        if (typeof paramType !== expectedParameters[paramName]) {
+          console.log(`Parameter '${paramName}' should be of type '${expectedParameters[paramName]}'`);
+          if (paramName === 'startTime' || paramName === 'endTime') {
+            console.log(`'${paramName}' should be epoch time of format 1608081180000`);
+          }
+          process.exit(1);
+        }
+      }
+    }
   }
 }
