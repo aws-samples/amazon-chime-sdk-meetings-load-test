@@ -28,19 +28,22 @@ export default class MeetingActivity {
     return meetingsDirectory;
   }
 
-  async createAMeetingMultipleAttendeesList(meetingId) {
+  async createAMeetingMultipleAttendeesList(getExistingMeetingObject) {
     const chime = new AWS.Chime({ region: 'us-east-1' });
     // Set the AWS SDK Chime endpoint to prod as per requirement: https://service.chime.aws.amazon.com.
     chime.endpoint = new AWS.Endpoint('https://tapioca.us-east-1.amazonaws.com');
-    let meeting = null;
-    if (meetingId === null) {
+    let meeting;
+    if (getExistingMeetingObject === false) {
       meeting = await chime.createMeeting({
         ClientRequestToken: uuidv4(),
         MediaRegion: AWS.config.region,
         ExternalMeetingId: uuidv4().substring(0, 64),
       }).promise();
-      meetingId = meeting.Meeting.MeetingId;
+    } else {
+      meeting = this.getExistingMeetingObject();
     }
+    const meetingId = meeting.Meeting.MeetingId;
+    console.log(meeting);
     const attendeesBatch = [];
     for (let attendee = 0; attendee < this.attendeesPerMeeting; attendee += 1) {
       attendeesBatch.push({ExternalUserId: uuidv4().substring(0, 64)})
@@ -124,7 +127,6 @@ export default class MeetingActivity {
             this.support.log('meetingAttendeeArray cleaned');
           }
         }
-        console.log('----->>>>> ', meetingAttendeeArray.length)
       } catch (err) {
         this.support.error('Failed SQS retrieval ' + err);
       }
@@ -190,12 +192,33 @@ export default class MeetingActivity {
           };
           meetingAttendeeListIndex += 1;
         } else {
-          console.log('meetingAttendeeObject could not be created, exiting... ')
+          console.log('meetingAttendeeObject could not be created, exiting... ');
           process.exit(1);
         }
       } catch (err) {
         console.error('Error while Fetching ', err)
       }
     }
+    return meetingAttendeeArray;
+  }
+
+  getExistingMeetingObject() {
+    //replace this with desired Meeting Object
+    return {
+      Meeting: {
+        MeetingId: 'f9fa971f-804a-410f-91c8-4289aabc1829',
+        ExternalMeetingId: '2313e32b-30d7-4d1c-9d96-ca0f6528321a',
+        MediaPlacement: {
+          AudioHostUrl: '673f9cc15501e2fc50771d1848492c8f.k.m2.ue1.g.app.chime.aws:4172',
+          AudioFallbackUrl: 'wss://haxrp.m2.ue1.g.app.chime.aws:443/calls/f9fa971f-804a-410f-91c8-4289aabc1829',
+          ScreenDataUrl: 'wss://bitpw.m2.ue1.g.app.chime.aws:443/v2/screen/f9fa971f-804a-410f-91c8-4289aabc1829',
+          ScreenSharingUrl: 'wss://bitpw.m2.ue1.g.app.chime.aws:443/v2/screen/f9fa971f-804a-410f-91c8-4289aabc1829',
+          ScreenViewingUrl: 'wss://bitpw.m2.ue1.g.app.chime.aws:443/ws/connect?passcode=null&viewer_uuid=null&X-BitHub-Call-Id=f9fa971f-804a-410f-91c8-4289aabc1829',
+          SignalingUrl: 'wss://signal.m2.ue1.g.app.chime.aws/control/f9fa971f-804a-410f-91c8-4289aabc1829',
+          TurnControlUrl: 'https://ccp.cp.ue1.g.app.chime.aws/v2/turn_sessions'
+        },
+        MediaRegion: 'us-east-1'
+      }
+    };
   }
 }

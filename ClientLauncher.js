@@ -53,7 +53,7 @@ export default class ClientLauncher {
       this.support.log('ThreadCount: ' + threadCount);
 
       if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS) {
-        meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(null);
+        meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(true);
         console.log(meetingAttendeeArray);
       } else if (!this.generateMeetingAttendeeAfterBrowserLoad) {
         if (this.SESSION_PASSCODE === 0) {
