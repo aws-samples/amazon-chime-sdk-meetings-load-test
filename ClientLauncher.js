@@ -30,6 +30,8 @@ export default class ClientLauncher {
     this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'LoadTest';
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
     this.SESSION_PASSCODE = launcherArgs.sessionPasscode || 0;
+    this.USE_EXISTING_MEETING = launcherArgs.useExistingMeeting || false;
+    console.log(this.USE_EXISTING_MEETING);
     this.generateMeetingAttendeeAfterBrowserLoad = false;
     if (this.NO_ACTIVE_VIDEO_PER_MEETING > this.NO_ATTENDEES_PER_MEETING) {
       this.NO_ACTIVE_VIDEO_PER_MEETING = this.NO_ATTENDEES_PER_MEETING;
@@ -40,7 +42,6 @@ export default class ClientLauncher {
     }
     this.run();
   }
-
   async run() {
     if (isMainThread) {
       this.support.putMetricData('LauncherRunning', 500);
@@ -53,7 +54,7 @@ export default class ClientLauncher {
       this.support.log('ThreadCount: ' + threadCount);
 
       if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS) {
-        meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(true);
+        meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(this.USE_EXISTING_MEETING);
         console.log(meetingAttendeeArray);
       } else if (!this.generateMeetingAttendeeAfterBrowserLoad) {
         if (this.SESSION_PASSCODE === 0) {

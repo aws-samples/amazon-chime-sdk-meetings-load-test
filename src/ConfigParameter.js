@@ -28,6 +28,7 @@ export default class ConfigParameter {
         loadTestSessionName: 'string',
         sessionPasscode: 'number',
         localMachine: 'boolean',
+        useExistingMeeting: 'boolean',
         generateMultipleAttendeesForAMeeting: 'boolean'
       };
 
