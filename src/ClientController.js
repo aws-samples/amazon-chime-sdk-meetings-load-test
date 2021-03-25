@@ -1,21 +1,42 @@
-import ClientLauncher from "../ClientLauncher";
-
-class ClientController {
-  /*
-  * This class is not being used currently as part of the seperation of the client and the launcher tasks. The methods in this class have however been implemented on the client side
-  * However, as per the requirements, the methods can be invoked.
-  *
-  */
+export default class ClientController {
   reportFetch = {};
 
-  constructor(maxTimeOut, minTimeOut, support) {
+  constructor(pages, support) {
+    this.pages = pages;
     this.support = support;
-    this.maxTimeOut = maxTimeOut;
-    this.minTimeOut = minTimeOut;
   }
 
-  async setMeetingTimeout(page, reportFetch) {
-    if (page !== null) {
+  async toggleVideo(videoButton = 'button-camera') {
+    for (const [key, value] of Object.entries(this.pages)) {
+      const browserTab = 1;
+      const page = this.pages[key];
+      if (page) {
+        try {
+          this.support.log('Attempting to toggle video on', value);
+          const videoToggle = await page.evaluate(async (videoButton) => {
+            return new Promise((resolve, reject) => {
+              try {
+                document.getElementById(videoButton).click();
+                resolve('Success');
+              } catch (err) {
+                resolve('Fail');
+              }
+            });
+          }, videoButton);
+          if (videoToggle === 'Success') {
+            this.support.log('Video toggled on tab #', browserTab);
+          } else {
+            this.support.error('Failed to toggle video on tab #', browserTab);
+          }
+        } catch (err) {
+          this.support.error('Failed to toggle video on tab # ', browserTab + ' due to ' + err);
+        }
+      }
+    }
+  }
+
+  async setMeetingTimeout(reportFetch) {
+    if (page) {
       const tabRandomDuration = new Map();
       for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
         if (!tabRandomDuration.has(browserTab)) {
@@ -24,10 +45,10 @@ class ClientController {
         setTimeout(async () => {
           try {
             if (page[browserTab] !== null) {
-              await this.meetingTimeoutActivity(page, reportFetch, browserTab);
+              await this.meetingTimeoutActivity(page, reportFetch, value);
             }
           } catch (err) {
-            this.support.error('Failed to end meeting ' + err, browserTab);
+            this.support.error('Failed to end meeting ' + err, value);
             this.support.putMetricData('MeetingLeaveFail', 1);
           } finally {
             page[browserTab] = null;
@@ -37,7 +58,7 @@ class ClientController {
     }
   }
 
-  async meetingTimeoutActivity(page, reportFetch, browserTab) {
+  async meetingTimeoutActivity(page, reportFetch, value) {
     this.support.log('Attempting to quit meeting', browserTab);
     clearInterval(reportFetch[browserTab]);
     reportFetch[browserTab] = null;
@@ -66,47 +87,56 @@ class ClientController {
     }
   }
 
-  async leaveMeeting(page, browserTab) {
-    try {
-      this.support.log('Attempting to quit meeting', browserTab);
-      ClientLauncher.loadTestEndSignal = true;
-      clearInterval(this.reportFetch[browserTab]);
-      this.reportFetch[browserTab] = null;
-      const closeStatus = await page.evaluate(async () => {
-        return new Promise((resolve, reject) => {
-          try {
-            document.getElementById('button-meeting-leave').click();
-            resolve('Success');
-          } catch (err) {
-            resolve('Fail');
+  async leaveMeeting(meetingDuration, meetingLeaveButton) {
+    setTimeout(async (meetingLeaveButton) => {
+      for (const [key, value] of Object.entries(this.pages)) {
+        const browserTab = 1;
+        const page = this.pages[key];
+        try {
+          this.support.log('Attempting to leave meeting');
+          const closeStatus = await page.evaluate(async (meetingLeaveButton) => {
+            return new Promise((resolve, reject) => {
+              try {
+                document.getElementById(meetingLeaveButton).click();
+                resolve('Success');
+              } catch (err) {
+                resolve('Fail');
+              }
+            });
+          }, meetingLeaveButton);
+          if (closeStatus === 'Success') {
+            this.support.log('Meeting Left', browserTab);
+            this.support.putMetricData('MeetingLeaveSuccess', 1);
+          } else {
+            this.support.error('Failed to Leave meeting from the browser ');
+            this.support.putMetricData('MeetingLeaveFail', 1);
           }
-        });
-      });
-      if (closeStatus === 'Success') {
-        this.support.log('Tab closed', browserTab);
-        this.support.putMetricData('MeetingLeaveSuccess', 1);
-      } else {
-        this.support.error('Failed to Leave meeting from the browser ');
-        this.support.putMetricData('MeetingLeaveFail', 1);
+        } catch (err) {
+          this.support.error('Failed to end meeting ' + err, browserTab);
+          this.support.putMetricData('MeetingLeaveFail', 1);
+        }
       }
-    } catch (err) {
-      this.support.error('Failed to end meeting ' + err, browserTab);
-      this.support.putMetricData('MeetingLeaveFail', 1);
-    }
+    }, meetingDuration, meetingLeaveButton);
   }
 
-  async closeBrowserTab(page) {
-    try {
-      if (page !== null) {
-        let localPage = page;
-        page = null;
-        await localPage.close();
-        localPage = null;
-        this.support.log('Close BrowserTab Success ');
+  async closeBrowserTab(maxMeetingDuration) {
+    setTimeout(async (meetingLeaveButton) => {
+      for (const [key, value] of Object.entries(this.pages)) {
+        const browserTab = 1;
+        const page = this.pages[key];
+        try {
+          if (page !== null) {
+            let localPage = page;
+            this.pages[key] = null;
+            await localPage.close();
+            localPage = null;
+            this.support.log('Close BrowserTab Success ', browserTab);
+          }
+        } catch (err) {
+          this.support.error('Close BrowserTab failed ' + err, browserTab);
+        }
       }
-    } catch (err) {
-      this.support.error('Close BrowserTab failed ' + err);
-    }
+    }, maxMeetingDuration);
   }
 
   async closeBrowser(browser, page, waitFactor = 1.5) {
@@ -115,14 +145,14 @@ class ClientController {
         for (const [key, value] of Object.entries(browser)) {
           if (browser[key] && browser[key].isConnected()) {
             try {
-              const pages = await browser[key].pages();
-              await this.leaveMeeting(pages[0], key);
+              const pages = await browser[key].this.pages();
+              //await this.leaveMeeting(this.pages[0], key);
               this.support.log('Close browser initiated');
               if (typeof this.reportFetch !== 'undefined' && this.reportFetch[key] !== null) {
                 clearInterval(this.reportFetch[key]);
                 this.reportFetch[key] = null;
               }
-              await pages[0].close();
+              await this.pages[0].close();
             } catch (err) {
               this.support.error(err);
             } finally {
@@ -137,37 +167,72 @@ class ClientController {
     }
   }
 
-  async startMeetingSession(page, meetingInfo, attendeeInfo, browserTab, threadId) {
-    if (workerData.threadId === threadId && page !== null) {
+  async joinMeeting(joinButton) {
+    for (const [key, value] of Object.entries(this.pages)) {
+      const browserTab = 1;
       try {
-        const meetingId = meetingInfo.MeetingId;
-        const attendeeId = attendeeInfo.AttendeeId;
-        if (page !== null) {
+        const page = this.pages[key];
+        if (page) {
+          await page.waitForNavigation();
+          await this.support.delay(1000);
+          const meetingStartStatus = await page.evaluate((joinButton) => {
+              return new Promise((resolve, reject) => {
+                try {
+                  document.getElementById(joinButton).click();
+                  resolve('Success');
+                } catch (err) {
+                  resolve('Fail');
+                }
+              });
+            }, joinButton);
+
+          if (meetingStartStatus === 'Success') {
+            this.support.log('Join meeting SUCCESS on tab ', browserTab);
+            this.support.putMetricData('JoinMeetingSuccess', 1);
+          } else {
+            this.support.log('Join meeting FAIL on tab ', browserTab);
+            this.support.putMetricData('JoinMeetingFail', 1);
+          }
+        }
+      } catch (err) {
+        this.support.error('Exception on page evaluate 1111 ' + err, browserTab);
+        this.support.putMetricData('MeetingStartFailPageEvaluate', 1);
+      }
+    }
+  }
+
+  async startMeetingSession(meetingId, attendeeId) {
+    for (const [key, value] of Object.entries(this.pages)) {
+      const browserTab = 1;
+      try {
+        const page = this.pages[key];
+        if (page) {
+          await page.waitForNavigation();
           const meetingStartStatus = await page.evaluate(
-            (attendeeId, meetingId, browserTab) => {
+            (attendeeId, meetingId) => {
               return new Promise((resolve, reject) => {
                 try {
                   document.getElementById('inputMeeting').value = meetingId;
-                  document.getElementById('inputName').value = meetingId + ' : ' + browserTab + ' : ' + attendeeId;
+                  document.getElementById('inputName').value = attendeeId;
                   document.getElementById('authenticate').click();
                   resolve('Success');
                 } catch (err) {
                   resolve('Fail');
                 }
               });
-            }, attendeeId, meetingId, browserTab);
+            }, attendeeId, meetingId);
 
           if (meetingStartStatus === 'Success') {
-            this.support.log('Meeting start SUCCESS on tab # ', browserTab);
+            this.support.log('Meeting start SUCCESS on tab ', browserTab);
             this.support.putMetricData('MeetingStartSuccess', 1);
           } else {
-            this.support.log('Meeting start FAIL on tab # ', browserTab);
+            this.support.log('Meeting start FAIL on tab ', browserTab);
             this.support.putMetricData('MeetingStartFail', 1);
           }
         }
       } catch (err) {
-        this.support.error('Exception on page evaluate ' + err, browserTab);
-        this.support.putMetricData('MeetingStartFailPageEvaluate', 1);
+        this.support.error('Exception on page evaluate1111 ' + err, browserTab);
+        this.support.putMetricData('MeetingStartFailPageEvaluate', browserTab);
       }
     }
   }

@@ -29,8 +29,26 @@ export default class ConfigParameter {
         sessionPasscode: 'number',
         localMachine: 'boolean',
         useExistingMeeting: 'boolean',
-        generateMultipleAttendeesForAMeeting: 'boolean'
+        generateMultipleAttendeesForMultipleMeetings: 'boolean',
+        generateMultipleAttendeesForAMeeting: 'boolean',
+        generateAttendeesAgainstMeetingPin: 'boolean',
+        launchServerlessClients: 'boolean'
       };
+
+      if (!launcherArgs.hasOwnProperty('generateMultipleAttendeesForMultipleMeetings') &&
+        !launcherArgs.hasOwnProperty('generateMultipleAttendeesForAMeeting') &&
+        !launcherArgs.hasOwnProperty('generateAttendeesAgainstMeetingPin') &&
+        !launcherArgs.hasOwnProperty('launchServerlessClients')) {
+        console.error('Expecting 1 of the 4 parameters to define the launch method');
+        process.exit(1);
+      }
+
+      if (launcherArgs.hasOwnProperty('generateAttendeesAgainstMeetingPin')) {
+        if (!launcherArgs.hasOwnProperty('sessionPasscode')) {
+          console.error('Expecting parameter sessionPasscode for this launch method');
+          process.exit(1);
+        }
+      }
 
       for (let [paramName, paramType] of Object.entries(launcherArgs)) {
         if (!(paramName in expectedParameters)) {

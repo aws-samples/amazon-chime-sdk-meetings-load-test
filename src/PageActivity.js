@@ -1,77 +1,82 @@
-import ClientLauncher from "../ClientLauncher.js";
-import { createRequire } from 'module';
+import ClientLauncher from '../ClientLauncher.js';
+import {createRequire} from 'module';
+import serverlessRestApiForAccountMap from '../configs/ServerlessRestApiAccountMap.js';
+import serverlessClientUrl from '../configs/ServerlessClientURL.js';
+
 const require = createRequire(import.meta.url);
 
-const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
-import serverlessRestApiForAccountMap from '../configs/ServerlessRestApiAccountMap.js';
+const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
 
 export default class PageActivity {
+  MAX_PUT_RECORD_TRY_COUNT = 3;
+
   constructor(support) {
     this.support = support;
     const sharedConfigParameters = workerData.sharedConfigParameters;
-    this.maxDuration = sharedConfigParameters.maxDurationMin;
-    this.minDuration = sharedConfigParameters.minDurationMin;
+    this.maxDuration = sharedConfigParameters.maxDurationMs;
+    this.minDuration = sharedConfigParameters.minDurationMs;
     this.loadTestName = sharedConfigParameters.loadTestSessionName;
     this.sessionPasscode = sharedConfigParameters.sessionPasscode;
     this.activeVideosPerMeeting = sharedConfigParameters.activeVideosPerMeeting;
+    this.launchServerlessClients = sharedConfigParameters.launchServerlessClients;
   }
 
   async openLinkInPage(page, meetingInfo, attendeeInfo, browserTab, noOfRetries = 0) {
-    if (noOfRetries >= 3) {
-      page = null;
-      this.support.putMetricData('BrowserTabOpenFail', 1);
-      return;
-    }
-    if (page && page !== null) {
-      try {
-        let timeToWaitMS = this.support.getRndDuration(1000, 30000);
-        const meetingLeaveAfterMs = timeToWaitMS + this.support.getRndDuration(this.maxDuration, this.minDuration);
-        //const serverlessRestApi = this.getServerlessRestApiForAccount(workerData.accountId);
-        //const url = 'https://' + serverlessRestApi + '.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingLeaveAfterMs=' + meetingLeaveAfterMs + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
+    for (let tryCount = 0; tryCount <= this.MAX_PUT_RECORD_TRY_COUNT; tryCount++) {
+      if (page) {
+        let url = '';
+        if (this.launchServerlessClients) {
+          url = serverlessClientUrl;
+        } else {
+          url = 'http://127.0.0.1:8080/?';
+          let timeToWaitMS = this.support.getRndDuration(1000, 30000);
+          const meetingLeaveAfterMs = timeToWaitMS + this.support.getRndDuration(this.maxDuration, this.minDuration);
+          //const serverlessRestApi = this.getServerlessRestApiForAccount(workerData.accountId);
+          //const url = 'https://' + serverlessRestApi + '.execute-api.us-east-1.amazonaws.com/Prod/v2/?timeToWaitMS=' + timeToWaitMS + '&meetingLeaveAfterMs=' + meetingLeaveAfterMs + '&meetingInfo=' + encodeURIComponent(JSON.stringify(meetingInfo)) + '&attendeeInfo=' + encodeURIComponent(JSON.stringify(attendeeInfo)) + '&instanceId=' + workerData.instanceId + '&loadTestStartTime=' + workerData.loadTestStartTimeStampEpoch;
 
-        if (meetingInfo !== null && attendeeInfo!== null) {
-          timeToWaitMS = this.getTimeToWaitMS();
+          url += '&meetingLeaveAfterMs=' +
+            meetingLeaveAfterMs +
+            '&instanceId=' +
+            workerData.instanceId +
+            '&loadTestStartTime=' +
+            workerData.loadTestStartTimeStampEpoch +
+            '&loadTestSessionName=' +
+            this.loadTestName;
+
+          if (meetingInfo && attendeeInfo) {
+            timeToWaitMS = this.getTimeToWaitMS();
+            url += 'timeToWaitMS=' + timeToWaitMS;
+            url += '&meetingInfo=' +
+              encodeURIComponent(JSON.stringify(meetingInfo)) +
+              '&attendeeInfo=' +
+              encodeURIComponent(JSON.stringify(attendeeInfo));
+          }
+          if (this.sessionPasscode !== 0) {
+            url += '&setUsingPasscode=true';
+          }
         }
-
-        let url =
-          'http://127.0.0.1:8080/?timeToWaitMS=' +
-          timeToWaitMS +
-          '&meetingLeaveAfterMs=' +
-          meetingLeaveAfterMs +
-          '&instanceId=' +
-          workerData.instanceId +
-          '&loadTestStartTime=' +
-          workerData.loadTestStartTimeStampEpoch +
-          '&loadTestSessionName=' +
-          this.loadTestName;
-
-        if (meetingInfo !== null && attendeeInfo!== null) {
-          url += '&meetingInfo=' +
-            encodeURIComponent(JSON.stringify(meetingInfo)) +
-            '&attendeeInfo=' +
-            encodeURIComponent(JSON.stringify(attendeeInfo));
-        } else if (this.activeVideosPerMeeting > 0) {
-          url += '&videoEnable=true';
-        }
-
-        if(this.sessionPasscode !== 0) {
-          url += '&setUsingPasscode=true';
-        }
-
         this.support.log(url);
-        page.setDefaultNavigationTimeout(0);
-        const response = page.goto(url);
-        this.support.log('Client Launched.... ', browserTab);
-        this.support.putMetricData('ClientLaunched', 1);
-      } catch (err) {
-        this.support.error('Failed to load  ' + err, browserTab);
-        noOfRetries += 1;
-        this.openLinkInPage(page, meetingInfo, attendeeInfo, browserTab, noOfRetries);
+        try {
+          page.setDefaultNavigationTimeout(0);
+          await this.support.delay(100);
+          page.goto(url);
+          this.support.log('Client Launched.... ', browserTab);
+          this.support.putMetricData('ClientLaunched', 1);
+          break;
+        } catch (err) {
+          this.support.error('Failed to load  ' + err, browserTab);
+        }
+      }
+      if (tryCount === this.MAX_PUT_RECORD_TRY_COUNT) {
+        page = null;
+        this.support.error('Failed to load  ', browserTab);
+        this.support.putMetricData('BrowserTabOpenFail', 1);
+        return;
       }
     }
   }
 
-  getTimeToWaitMS () {
+  getTimeToWaitMS() {
     const loadTestStartTimeStampEpoch = workerData.loadTestStartTimeStampEpoch;
     const currentTimeStampEpoch = Date.now();
     let timeToWaitMS = 1000;
@@ -89,14 +94,7 @@ export default class PageActivity {
       this.support.putMetricData('timeToWaitMS-444', 1);
     }
 
-    //if (this.NO_OF_MEETINGS < 30) {
-    timeToWaitMS /= 2;
-    //}
-
-    if (this.sessionPasscode !== 0) {
-      timeToWaitMS /= 10;
-    }
-    return timeToWaitMS;
+    return timeToWaitMS / 3;
   }
 
   getServerlessRestApiForAccount(accountId) {
@@ -119,10 +117,13 @@ export default class PageActivity {
     if (pages.length > 0) {
       page = pages[0];
     } else {
+      await this.support.delay(100);
       page = await browser.newPage().catch(async (err) => {
         this.support.error('New page failed to load...Retrying... ' + err, browserTab);
         noOfRetries += 1;
         page = await this.createNewPage(browser, browserTab, mapPageMeetingAttendee, noOfRetries);
+      }).then(() => {
+        this.support.log('New page created' + browserTab);
       });
     }
     if (typeof page !== 'undefined' && page !== null) {
@@ -137,15 +138,14 @@ export default class PageActivity {
         this.support.log(page !== null);
         if (ClientLauncher.loadTestEndSignal === false &&
           page !== null &&
-          mapPageMeetingAttendee[(workerData.threadId, browserTab)] &&
-          mapPageMeetingAttendee[(workerData.threadId, browserTab)].meetingInfo &&
-          mapPageMeetingAttendee[(workerData.threadId, browserTab)].attendeeInfo) {
+          mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.meetingInfo &&
+          mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.attendeeInfo) {
           this.support.log('Attempting to restart...', page);
           page = await this.createNewPage(browser, browserTab, mapPageMeetingAttendee);
           this.support.log('Attempting to restart 2222' + page);
           await this.resurrectClosedMeeting(page,
-            mapPageMeetingAttendee[(workerData.threadId, browserTab)].meetingInfo,
-            mapPageMeetingAttendee[(workerData.threadId, browserTab)].attendeeInfo,
+            mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.meetingInfo,
+            mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.attendeeInfo,
             browserTab)
             .then(() => {
               this.support.log('Meeting Restarted', browserTab);
@@ -209,9 +209,9 @@ export default class PageActivity {
   }
 
   async resumeAudioContext(page) {
-    if (page !== null) {
+    if (page) {
       try {
-        const meetingStartStatus = await page.evaluate(() => {
+        return await page.evaluate(() => {
           return new Promise((resolve, reject) => {
             try {
               document.body.click();
@@ -221,7 +221,6 @@ export default class PageActivity {
             }
           });
         });
-        return meetingStartStatus;
       } catch (err) {
         this.support.error('Audio Context Failed to start ' + err);
       }

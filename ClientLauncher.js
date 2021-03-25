@@ -2,8 +2,7 @@ import ThreadActivity from "./src/ThreadActivity.js";
 import ChildActivity from "./src/ChildActivity.js";
 import MeetingActivity from "./src/MeetingActivity.js";
 import Support from "./src/Support.js";
-
-import { createRequire } from 'module';
+import {createRequire} from 'module';
 import ConfigParameter from "./src/ConfigParameter.js";
 const require = createRequire(import.meta.url);
 const fs = require('fs');
@@ -31,14 +30,13 @@ export default class ClientLauncher {
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
     this.SESSION_PASSCODE = launcherArgs.sessionPasscode || 0;
     this.USE_EXISTING_MEETING = launcherArgs.useExistingMeeting || false;
-    console.log(this.USE_EXISTING_MEETING);
-    this.generateMeetingAttendeeAfterBrowserLoad = false;
+    this.LAUNCH_SERVERLESS_CLIENTS = launcherArgs.launchServerlessClients || false;
+    this.GENERATE_MULTIPLE_ATTENDEES_FOR_MULTIPLE_MEETINGS = launcherArgs.generateMultipleAttendeesForMultipleMeetings || false;
+    this.GENERATE_ATTENDEES_AGAINST_MEETING_PIN = launcherArgs.generateAttendeesAgainstMeetingPin || false;
+
     if (this.NO_ACTIVE_VIDEO_PER_MEETING > this.NO_ATTENDEES_PER_MEETING) {
       this.NO_ACTIVE_VIDEO_PER_MEETING = this.NO_ATTENDEES_PER_MEETING;
       console.log('Number of active video tiles cannot be greater than number of participants, setting NO_ACTIVE_VIDEO_PER_MEETING = NO_ATTENDEES_PER_MEETING');
-    }
-    if (launcherArgs.meetingCount === 1 && launcherArgs.attendeesPerMeeting > 10 && this.SESSION_PASSCODE === 0) {
-      this.generateMeetingAttendeeAfterBrowserLoad = true;
     }
     this.run();
   }
@@ -47,26 +45,27 @@ export default class ClientLauncher {
       this.support.putMetricData('LauncherRunning', 500);
       const threadCount = this.NO_OF_THREADS;
       const threads = new Set();
-      let meetingAttendeeArray = null;
+      let meetingAttendeeArray = [];
       const sharedConfigParameters = this.getSharedConfigParameters();
       const threadActivity = new ThreadActivity(sharedConfigParameters, this.support);
       const meetingActivity = new MeetingActivity(sharedConfigParameters, this.support);
-      this.support.log('ThreadCount: ' + threadCount);
 
-      if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS) {
+      if (this.LAUNCH_SERVERLESS_CLIENTS) {
+        this.support.log('Launching serverless clients');
+      } else if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS) {
         meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(this.USE_EXISTING_MEETING);
-        console.log(meetingAttendeeArray);
-      } else if (!this.generateMeetingAttendeeAfterBrowserLoad) {
-        if (this.SESSION_PASSCODE === 0) {
-          this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
-          meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromSQS('E2ELoadTestStack-ResponseQueue');
-        } else {
-          this.support.log('No Of Attendees: ' + this.NO_ATTENDEES_PER_MEETING);
-          meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE);
-        }
-        this.support.log('MeetingAttendeeArrayLength ' + meetingAttendeeArray.length);
-        this.support.putMetricData('MeetingAttendeeArrayLength', meetingAttendeeArray.length);
+      } else if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_MULTIPLE_MEETINGS) {
+        meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromSQS('E2ELoadTestStack-ResponseQueue');
+      } else if (this.GENERATE_ATTENDEES_AGAINST_MEETING_PIN) {
+        meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE);
       }
+
+      this.support.log('ThreadCount: ' + threadCount);
+      this.support.log('No Of Meetings: ' + this.NO_OF_MEETINGS);
+      this.support.log('No Of Attendees: ' + this.NO_ATTENDEES_PER_MEETING);
+      this.support.log('MeetingAttendeeArrayLength ' + meetingAttendeeArray.length);
+      this.support.putMetricData('MeetingAttendeeArrayLength', meetingAttendeeArray.length);
+
       const loadTestStartTimeStampEpoch = Date.now();
       await threadActivity.spawnThreads(
         meetingAttendeeArray,
@@ -83,21 +82,20 @@ export default class ClientLauncher {
   }
 
   getSharedConfigParameters() {
-    const sharedConfigParameters =
-      {
-        meetingCount: this.NO_OF_MEETINGS,
-        noOfThreads: this.NO_OF_THREADS,
-        attendeesPerMeeting: this.NO_ATTENDEES_PER_MEETING,
-        activeVideosPerMeeting: this.NO_ACTIVE_VIDEO_PER_MEETING,
-        minDurationMin: this.MIN_ACTIVE_TIME_MS,
-        maxDurationMin: this.MAX_ACTIVE_TIME_MS,
-        metricGrabFrequencyMin: this.METRIC_GRAB_FREQUENCY,
-        putMetricDataNamespace: this.PUT_METRIC_DATA_NAMESPACE,
-        loadTestSessionName: this.LOADTEST_SESSION_NAME,
-        sessionPasscode: this.SESSION_PASSCODE,
-        isLocalMachine: this.RUN_FROM_LOCAL_MACHINE
-      };
-    return sharedConfigParameters;
+    return {
+      meetingCount: this.NO_OF_MEETINGS,
+      noOfThreads: this.NO_OF_THREADS,
+      attendeesPerMeeting: this.NO_ATTENDEES_PER_MEETING,
+      activeVideosPerMeeting: this.NO_ACTIVE_VIDEO_PER_MEETING,
+      minDurationMs: this.MIN_ACTIVE_TIME_MS,
+      maxDurationMs: this.MAX_ACTIVE_TIME_MS,
+      metricGrabFrequencyMin: this.METRIC_GRAB_FREQUENCY,
+      putMetricDataNamespace: this.PUT_METRIC_DATA_NAMESPACE,
+      loadTestSessionName: this.LOADTEST_SESSION_NAME,
+      sessionPasscode: this.SESSION_PASSCODE,
+      isLocalMachine: this.RUN_FROM_LOCAL_MACHINE,
+      launchServerlessClients: this.LAUNCH_SERVERLESS_CLIENTS
+    };
   }
 }
 

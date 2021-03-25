@@ -1,8 +1,10 @@
 
 import BrowserActivity from "./BrowserActivity.js";
 import PageActivity from "./PageActivity.js";
+import ClientController from "./ClientController.js";
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
+const { v4: uuidv4 } = require('uuid');
 
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
@@ -15,13 +17,29 @@ export default class ChildActivity {
 
   async childThreadActivity() {
     const webRTCStatReport = {};
-      const browserActivity = new BrowserActivity(this.support);
-      const pageActivity = new PageActivity(this.support);
-      const pages = await this.openClient(browserActivity, pageActivity);
-      const now = Date.now();
-      await pageActivity.resumeAudioContextForAllPages(pages);
+    const browserActivity = new BrowserActivity(this.support);
+    const pageActivity = new PageActivity(this.support);
+    const pages = await this.openClient(browserActivity, pageActivity);
+    const now = Date.now();
 
-      if (this.realTimeMetricAggregate) {
+    if (workerData.sharedConfigParameters.launchServerlessClients) {
+      const clientController = new ClientController(pages, this.support);
+      const meetingDuration = this.support.getRndDuration(workerData.sharedConfigParameters.maxDurationMs, workerData.sharedConfigParameters.minDurationMs);
+      const meetingName = 'fixed_meeting_name_vcnmjhgftr';
+      const attendeeName = uuidv4();
+      const joinButton = 'joinButton';
+      const videoButton = 'button-camera';
+      const meetingLeaveButton = 'button-meeting-leave';
+      await clientController.startMeetingSession(meetingName, attendeeName);
+      await clientController.joinMeeting(joinButton);
+      await clientController.toggleVideo(videoButton);
+      await clientController.leaveMeeting(meetingDuration, meetingLeaveButton);
+      await clientController.closeBrowserTab(workerData.sharedConfigParameters.maxDurationMs);
+    } else {
+      await pageActivity.resumeAudioContextForAllPages(pages);
+    }
+
+    if (this.realTimeMetricAggregate) {
         parentPort.postMessage({
           threadId: workerData.threadId,
           instanceId: workerData.instanceId,
@@ -43,8 +61,8 @@ export default class ChildActivity {
     const mapPageMeetingAttendee = new Map();
     for (let browserTab = workerData.start; browserTab < workerData.start + workerData.range; browserTab++) {
       browser[browserTab] = await browserActivity.openBrowser();
-      const meetingInfo = workerData.meetingAttendeeList ? workerData.meetingAttendeeList[browserTab].Meeting : null;
-      const attendeeInfo = workerData.meetingAttendeeList ? workerData.meetingAttendeeList[browserTab].Attendees : null;
+      const meetingInfo = workerData.meetingAttendeeList ? workerData.meetingAttendeeList[browserTab]?.Meeting : null;
+      const attendeeInfo = workerData.meetingAttendeeList ? workerData.meetingAttendeeList[browserTab]?.Attendees : null;
       mapPageMeetingAttendee[(workerData.threadId, browserTab)] = { meetingInfo, attendeeInfo };
       if (browser[browserTab] !== null) {
         pages[browserTab] = await pageActivity.createNewPage(

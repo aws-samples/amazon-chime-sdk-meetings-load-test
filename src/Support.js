@@ -1,4 +1,5 @@
-import { createRequire } from 'module';
+import {createRequire} from 'module';
+
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
 const { exec } = require('child_process');
@@ -24,8 +25,7 @@ export default class Support {
     const file = './configs/LoadTestStatus.json';
     const rawData = fs.readFileSync(file);
     const jsonData = JSON.parse(rawData);
-    const loadTestSessionId = jsonData.LoadTestSessionId.toString();
-    return loadTestSessionId;
+    return jsonData.LoadTestSessionId.toString();
   }
 
   getRndDuration(max, min) {
@@ -179,4 +179,7 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     exec(`aws s3 cp ${fileToUpload} s3://chimesdkmeetingsloadtest/logs/ `);
   }
 
+  delay(ms) {
+    return new Promise( resolve => setTimeout(resolve, ms) );
+  }
 }
