@@ -32,7 +32,10 @@ export default class ChildActivity {
       const meetingLeaveButton = 'button-meeting-leave';
       await clientController.startMeetingSession(meetingName, attendeeName);
       await clientController.joinMeeting(joinButton);
-      await clientController.toggleVideo(videoButton);
+      if (workerData.videoHandleCount > 0) {
+        await clientController.toggleVideo(videoButton);
+        workerData.sharedConfigParameters.videoHandleCount -= 1;
+      }
       await clientController.leaveMeeting(meetingDuration, meetingLeaveButton);
       await clientController.closeBrowserTab(workerData.sharedConfigParameters.maxDurationMs);
     } else {

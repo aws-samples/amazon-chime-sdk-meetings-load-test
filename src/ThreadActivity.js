@@ -10,12 +10,21 @@ export default class ThreadActivity {
   }
 
   async spawnThreads(meetingAttendeeList, threadCount, threads, loadTestStartTimeStampEpoch) {
+    let totalNoOfVideos = this.sharedConfigParameters.activeVideosPerMeeting;
     const max = meetingAttendeeList?.length || this.sharedConfigParameters.attendeesPerMeeting;
     const min = 0;
     console.log(`Running with ${threadCount} threads...`);
     let start = min;
     const accountId = (await this.support.getAccountDetails()).accountId;
     const instanceId = await this.support.getInstanceId();
+    const noOfVideosThreadHandle = [];
+    for (let threadId = 0; threadId < threadCount; threadId++) {
+      noOfVideosThreadHandle[threadId] = 0;
+    }
+    for (let threadId = 0; threadId < threadCount && totalNoOfVideos > 0; threadId++) {
+      noOfVideosThreadHandle[threadId] += 1;
+      totalNoOfVideos -= 1
+    }
     if (max % threadCount === 0) {
       const range = max / threadCount;
       for (let threadId = 0; threadId < threadCount; threadId++) {
@@ -29,7 +38,8 @@ export default class ThreadActivity {
             meetingAttendeeList,
             loadTestStartTimeStampEpoch,
             instanceId,
-            accountId
+            accountId,
+            noOfVideosThreadHandle[threadId]
           )
         );
         this.support.putMetricData('ThreadCreated', 1);
@@ -53,7 +63,8 @@ export default class ThreadActivity {
               meetingAttendeeList,
               loadTestStartTimeStampEpoch,
               instanceId,
-              accountId
+              accountId,
+              noOfVideosThreadHandle[threadId]
             )
           );
           this.support.putMetricData('ThreadCreated', 1);
@@ -68,7 +79,8 @@ export default class ThreadActivity {
               meetingAttendeeList,
               loadTestStartTimeStampEpoch,
               instanceId,
-              accountId
+              accountId,
+              noOfVideosThreadHandle[threadId]
             )
           );
           this.support.putMetricData('ThreadCreated', 1);
@@ -122,7 +134,8 @@ export default class ThreadActivity {
     meetingAttendeeList,
     loadTestStartTimeStampEpoch,
     instanceId,
-    accountId
+    accountId,
+    videoHandleCount
   ) {
     return new Worker(ClientLauncher.FILE_NAME, {
       workerData: {
@@ -133,7 +146,8 @@ export default class ThreadActivity {
         loadTestStartTimeStampEpoch: loadTestStartTimeStampEpoch,
         instanceId: instanceId,
         accountId: accountId,
-        sharedConfigParameters: this.sharedConfigParameters
+        sharedConfigParameters: this.sharedConfigParameters,
+        videoHandleCount
       },
     });
   }

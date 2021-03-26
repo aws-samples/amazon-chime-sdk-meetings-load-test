@@ -22,7 +22,7 @@ export default class PageActivity {
   }
 
   async openLinkInPage(page, meetingInfo, attendeeInfo, browserTab, noOfRetries = 0) {
-    for (let tryCount = 0; tryCount <= this.MAX_PUT_RECORD_TRY_COUNT; tryCount++) {
+    for (let tryCount = 0; tryCount < this.MAX_PUT_RECORD_TRY_COUNT; tryCount++) {
       if (page) {
         let url = '';
         if (this.launchServerlessClients) {
@@ -54,6 +54,10 @@ export default class PageActivity {
           if (this.sessionPasscode !== 0) {
             url += '&setUsingPasscode=true';
           }
+          if (workerData.videoHandleCount > 0) {
+            url += '&videoEnable=true';
+            workerData.sharedConfigParameters.videoHandleCount -= 1;
+          }
         }
         this.support.log(url);
         try {
@@ -69,7 +73,7 @@ export default class PageActivity {
       }
       if (tryCount === this.MAX_PUT_RECORD_TRY_COUNT) {
         page = null;
-        this.support.error('Failed to load  ', browserTab);
+        this.support.error('Failed to load, max try reached  ', browserTab);
         this.support.putMetricData('BrowserTabOpenFail', 1);
         return;
       }
@@ -140,9 +144,8 @@ export default class PageActivity {
           page !== null &&
           mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.meetingInfo &&
           mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.attendeeInfo) {
-          this.support.log('Attempting to restart...', page);
           page = await this.createNewPage(browser, browserTab, mapPageMeetingAttendee);
-          this.support.log('Attempting to restart 2222' + page);
+          this.support.log('Attempting to restart...', page);
           await this.resurrectClosedMeeting(page,
             mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.meetingInfo,
             mapPageMeetingAttendee[(workerData.threadId, browserTab)]?.attendeeInfo,
@@ -170,7 +173,7 @@ export default class PageActivity {
         this.support.log('Audio Context Resume Success on restarted page', browserTab);
         this.support.putMetricData('RestartMeetingSuccess', 1);
       } else {
-        this.support.log('Audio Context Resume Faled on restarted page', browserTab);
+        this.support.log('Audio Context Resume Failed on restarted page', browserTab);
         this.support.putMetricData('RestartMeetingFailed', 1);
       }
     } catch (err) {

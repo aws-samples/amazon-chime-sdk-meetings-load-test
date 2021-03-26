@@ -45,10 +45,10 @@ export default class ClientController {
         setTimeout(async () => {
           try {
             if (page[browserTab] !== null) {
-              await this.meetingTimeoutActivity(page, reportFetch, value);
+              await this.meetingTimeoutActivity(page, reportFetch, browserTab);
             }
           } catch (err) {
-            this.support.error('Failed to end meeting ' + err, value);
+            this.support.error('Failed to end meeting ' + err, browserTab);
             this.support.putMetricData('MeetingLeaveFail', 1);
           } finally {
             page[browserTab] = null;
@@ -58,7 +58,7 @@ export default class ClientController {
     }
   }
 
-  async meetingTimeoutActivity(page, reportFetch, value) {
+  async meetingTimeoutActivity(page, reportFetch, browserTab) {
     this.support.log('Attempting to quit meeting', browserTab);
     clearInterval(reportFetch[browserTab]);
     reportFetch[browserTab] = null;
