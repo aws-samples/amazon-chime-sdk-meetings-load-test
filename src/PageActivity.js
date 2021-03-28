@@ -56,7 +56,7 @@ export default class PageActivity {
           }
           if (workerData.videoHandleCount > 0) {
             url += '&videoEnable=true';
-            workerData.sharedConfigParameters.videoHandleCount -= 1;
+            workerData.videoHandleCount -= 1;
           }
         }
         this.support.log(url);

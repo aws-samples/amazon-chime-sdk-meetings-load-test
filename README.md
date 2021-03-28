@@ -25,17 +25,58 @@ Optional parameters:
 - loadTestSessionName
   - session name assigned to the load test
 - sessionPasscode
-  - passcode used to set up the anonymous users
+  - passcode used to set up the anonymous users, used along with generateAttendeesAgainstMeetingPin flag
 - generateMultipleAttendeesForAMeeting
   - generate batch attendees for a new or an existing meeting
 - useExistingMeeting
   - use this parameter with generateMultipleAttendeesForAMeeting to use existing meeting
+- generateMultipleAttendeesForMultipleMeetings: 
+  - launch parameter to launch multiple meetings with 10 attendees to each meeting
+- generateMultipleAttendeesForAMeeting:
+  - launch parameter to launch a new or existing meeting with multiple attendees associated to the meeting
+- generateAttendeesAgainstMeetingPin
+  - launch parameter to launch anonymous users to an active meeting using the meeting id
+- launchServerlessClients: 
+  - launch parameter to launch serverless JS SDK Chime clients and perform fixed operations
 
 Usage:
 
 ```
 node ClientLauncher.js --meetingCount 50 --attendeesPerMeeting 10 --minDurationMin 20 --maxDurationMin 30
 ```
+
+### Launch Methods:
+
+ GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS:
+ 
+    Flag: generateMultipleAttendeesForMultipleMeetings
+    Use this flag to call the createMeeting() and createBatchAttendee() to create 1 meeting and associate multiple attendees to the meeting.
+    Expected Parameters:
+      useExistingMeeting - instead of calling the createMeeting(), the launcher will associate attendees to a predefined meeting object.
+
+  GENERATE_MULTIPLE_ATTENDEES_FOR_MULTIPLE_MEETINGS:
+  
+    Flag: generateMultipleAttendeesForAMeeting
+    Use this flag if using the meeting generator and reading the meeting attendee objects from the SQS.
+    The meeting generator will create multiple meetings and associate 10 attendees per meeting.
+    Needs associated AWS account to generate the meetings and attendees on the meeting generator.
+
+  GENERATE_ATTENDEES_AGAINST_MEETING_PIN:
+  
+    Flag: generateAttendeesAgainstMeetingPin
+    Use this flag if we want to associate anonymous users to an on going meeting. The meeting pin will be used to let the anonymous users join the meeting.
+    Expected Parameters: sessionPasscode
+
+  LAUNCH_SERVERLESS_CLIENTS
+  
+    Flag: launchServerlessClients
+    Needs link to the serverless client that is to be tested. The serverless client should be able to create meeting and associate attendees to the meeting.
+    Use this launch methods for small number of attendees to avoid account throttling.
+    As of now, the ressurect feature will not work with this flag.
+    Expected Parameters: attendeesPerMeeting
+
+
+      
 
 NOTE: Scripts in the script directory can be used only in CORP network (local machine and cloud dev desktops)
 

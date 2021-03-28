@@ -34,7 +34,7 @@ export default class ChildActivity {
       await clientController.joinMeeting(joinButton);
       if (workerData.videoHandleCount > 0) {
         await clientController.toggleVideo(videoButton);
-        workerData.sharedConfigParameters.videoHandleCount -= 1;
+        workerData.videoHandleCount -= 1;
       }
       await clientController.leaveMeeting(meetingDuration, meetingLeaveButton);
       await clientController.closeBrowserTab(workerData.sharedConfigParameters.maxDurationMs);
