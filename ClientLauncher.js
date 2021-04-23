@@ -40,6 +40,7 @@ export default class ClientLauncher {
     }
     this.run();
   }
+
   async run() {
     if (isMainThread) {
       this.support.putMetricData('LauncherRunning', 500);
@@ -52,12 +53,13 @@ export default class ClientLauncher {
 
       if (this.LAUNCH_SERVERLESS_CLIENTS) {
         this.support.log('Launching serverless clients');
-      } else if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS) {
-        meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(this.USE_EXISTING_MEETING);
       } else if (this.GENERATE_MULTIPLE_ATTENDEES_FOR_MULTIPLE_MEETINGS) {
         meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromSQS('E2ELoadTestStack-ResponseQueue');
       } else if (this.GENERATE_ATTENDEES_AGAINST_MEETING_PIN) {
         meetingAttendeeArray = await meetingActivity.createMeetingAttendeeListFromPasscode(this.SESSION_PASSCODE);
+      } else {
+        // default case this.GENERATE_MULTIPLE_ATTENDEES_FOR_A_MEETINGS
+        meetingAttendeeArray = await meetingActivity.createAMeetingMultipleAttendeesList(this.USE_EXISTING_MEETING);
       }
 
       this.support.log('ThreadCount: ' + threadCount);

@@ -25,7 +25,7 @@ export default class ChildActivity {
     if (workerData.sharedConfigParameters.launchServerlessClients) {
       const clientController = new ClientController(pages, this.support);
       const meetingDuration = this.support.getRndDuration(workerData.sharedConfigParameters.maxDurationMs, workerData.sharedConfigParameters.minDurationMs);
-      const meetingName = 'fixed_meeting_name_vcnmjhgftr';
+      const meetingName = workerData.sharedConfigParameters.loadTestSessionName || 'fixed_meeting_name';
       const attendeeName = uuidv4();
       const joinButton = 'joinButton';
       const videoButton = 'button-camera';
