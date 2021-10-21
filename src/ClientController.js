@@ -6,34 +6,212 @@ export default class ClientController {
     this.support = support;
   }
 
-  async toggleVideo(videoButton = 'button-camera') {
-    for (const [key, value] of Object.entries(this.pages)) {
-      const browserTab = 1;
-      const page = this.pages[key];
+  async startMeetingSession(meetingId, browserTabList = []) {
+    if (browserTabList.length > 0) {
+      for (const browserTab of browserTabList) {
+        const attendeeId = await this.support.getInstanceId() + '-' + browserTab;
+        await this.startMeetingSessionOnPage(meetingId, attendeeId, browserTab, this.pages[browserTab]);
+      }
+    } else {
+      for (const [browserTab, page] of Object.entries(this.pages)) {
+        const attendeeId = await this.support.getInstanceId() + '-' + browserTab;
+        await this.startMeetingSessionOnPage(meetingId, attendeeId, browserTab, page);
+      }
+    }
+  }
+
+  async startMeetingSessionOnPage(meetingId, attendeeId, browserTab, page) {
+    try {
       if (page) {
-        try {
-          this.support.log('Attempting to toggle video on', value);
-          const videoToggle = await page.evaluate(async (videoButton) => {
+        await page.waitForNavigation();
+        const meetingStartStatus = await page.evaluate(
+          (attendeeId, meetingId) => {
             return new Promise((resolve, reject) => {
               try {
-                document.getElementById(videoButton).click();
+                document.getElementById('inputMeeting').value = meetingId;
+                document.getElementById('inputName').value = attendeeId;
+                document.getElementById('authenticate').click();
                 resolve('Success');
               } catch (err) {
                 resolve('Fail');
               }
             });
-          }, videoButton);
-          if (videoToggle === 'Success') {
-            this.support.log('Video toggled on tab #', browserTab);
-          } else {
-            this.support.error('Failed to toggle video on tab #', browserTab);
-          }
-        } catch (err) {
-          this.support.error('Failed to toggle video on tab # ', browserTab + ' due to ' + err);
+          }, attendeeId, meetingId);
+
+        if (meetingStartStatus === 'Success') {
+          this.support.log('Meeting start SUCCESS on tab ', browserTab);
+          this.support.putMetricData('MeetingStartSuccess', 1);
+        } else {
+          this.support.log('Meeting start FAIL on tab ', browserTab);
+          this.support.putMetricData('MeetingStartFail', 1);
         }
+      }
+    } catch (err) {
+      this.support.error('Exception on page evaluate1111 ' + err, browserTab);
+      this.support.putMetricData('MeetingStartFailPageEvaluate', browserTab);
+    }
+  }
+
+  async joinMeeting(joinButton, browserTabList = []) {
+    if (browserTabList.length > 0) {
+      for (const browserTab of browserTabList) {
+        await this.joinMeetingOnPage(joinButton, browserTab, this.pages[browserTab]);
+      }
+    } else {
+      for (const [browserTab, page] of Object.entries(this.pages)) {
+        await this.joinMeetingOnPage(joinButton, browserTab, page);
       }
     }
   }
+
+  async joinMeetingOnPage(joinButton, browserTab, page) {
+    try {
+      if (page) {
+        await page.waitForNavigation();
+        await this.support.delay(1000);
+        const meetingStartStatus = await page.evaluate((joinButton) => {
+          return new Promise((resolve, reject) => {
+            try {
+              document.getElementById(joinButton).click();
+              resolve('Success');
+            } catch (err) {
+              resolve('Fail');
+            }
+          });
+        }, joinButton);
+
+        if (meetingStartStatus === 'Success') {
+          this.support.log('Join meeting SUCCESS on tab ', browserTab);
+          this.support.putMetricData('JoinMeetingSuccess', 1);
+        } else {
+          this.support.log('Join meeting FAIL on tab ', browserTab);
+          this.support.putMetricData('JoinMeetingFail', 1);
+        }
+      }
+    } catch (err) {
+      this.support.error('Exception on page evaluate 1111 ' + err, browserTab);
+      this.support.putMetricData('MeetingStartFailPageEvaluate', 1);
+    }
+  }
+
+  async toggleVideo(videoButton, browserTabList = []) {
+    if (browserTabList.length > 0) {
+      for (const browserTab of browserTabList) {
+        await this.toggleVideoOnPage(videoButton, browserTab, this.pages[browserTab]);
+      }
+    } else {
+      for (const [browserTab, page] of Object.entries(this.pages)) {
+        await this.toggleVideoOnPage(videoButton, browserTab, page);
+      }
+    }
+  }
+
+  async toggleVideoOnPage(videoButton, browserTab, page) {
+    try {
+      if (page) {
+        this.support.log('Attempting to toggle video on', browserTab);
+        const videoToggle = await page.evaluate(async (videoButton) => {
+          return new Promise((resolve, reject) => {
+            try {
+              document.getElementById(videoButton).click();
+              resolve('Success');
+            } catch (err) {
+              resolve('Fail');
+            }
+          });
+        }, videoButton);
+        if (videoToggle === 'Success') {
+          this.support.log('Video toggled on tab #', browserTab);
+        } else {
+          this.support.error('Failed to toggle video on tab #', browserTab);
+        }
+      }
+    } catch (err) {
+      this.support.error('Failed to toggle video on tab # ', browserTab + ' due to ' + err);
+    }
+  }
+
+  async muteAttendee(muteButton, browserTabList = []) {
+    if (browserTabList.length > 0) {
+      for (const browserTab of browserTabList) {
+        await this.muteAttendeeOnPage(muteButton, browserTab, this.pages[browserTab]);
+      }
+    } else {
+      for (const [browserTab, page] of Object.entries(this.pages)) {
+        await this.muteAttendeeOnPage(muteButton, browserTab, page);
+      }
+    }
+  }
+
+  async muteAttendeeOnPage(muteButton, browserTab, page) {
+    try {
+      if (page) {
+        this.support.log(`Attempting to toggle mute on ${browserTab}`);
+        const muteToggle = await page.evaluate(async (muteButton) => {
+          return new Promise((resolve, reject) => {
+            try {
+              document.getElementById(muteButton).click();
+              resolve('Success');
+            } catch (err) {
+              resolve('Fail');
+            }
+          });
+        }, muteButton);
+        if (muteToggle === 'Success') {
+          this.support.log(`Mute toggled on tab #${browserTab}`);
+        } else {
+          this.support.error(`Failed to toggle mute on tab #${browserTab}`);
+        }
+      }
+    } catch (err) {
+        this.support.error(`Failed to toggle mute on tab #${browserTab} due to ${err}`);
+    }
+  }
+
+  async leaveMeeting(meetingDuration, meetingLeaveButton, browserTabList = []) {
+    if (browserTabList.length > 0) {
+      for (const browserTab of browserTabList) {
+        setTimeout(async (meetingLeaveButton, browserTab) => {
+          await this.leaveMeetingOnPage(meetingDuration, meetingLeaveButton, browserTab, this.pages[browserTab]);
+        }, meetingDuration, meetingLeaveButton, browserTab);
+      }
+    } else {
+      setTimeout(async (meetingLeaveButton) => {
+        for (const [browserTab, page] of Object.entries(this.pages)) {
+          await this.leaveMeetingOnPage(meetingDuration, meetingLeaveButton, browserTab, page);
+        }
+      }, meetingDuration, meetingLeaveButton);
+    }
+  }
+
+  async leaveMeetingOnPage(meetingDuration, meetingLeaveButton, browserTab, page) {
+    try {
+      this.support.log('Attempting to leave meeting');
+      const closeStatus = await page.evaluate(async (meetingLeaveButton) => {
+        return new Promise((resolve, reject) => {
+          try {
+            document.getElementById(meetingLeaveButton).click();
+            resolve('Success');
+          } catch (err) {
+            resolve('Fail');
+          }
+        });
+      }, meetingLeaveButton);
+      if (closeStatus === 'Success') {
+        this.support.log('Attendee left meeting', browserTab);
+        this.support.putMetricData('MeetingLeaveSuccess', 1);
+      } else {
+        this.support.error('Failed to leave meeting from the browser ');
+        this.support.putMetricData('MeetingLeaveFail', 1);
+      }
+    } catch (err) {
+      this.support.error('Failed to leave meeting ' + err, browserTab);
+      this.support.putMetricData('MeetingLeaveFail', 1);
+    }
+  }
+
+
+
 
   async setMeetingTimeout(reportFetch) {
     if (page) {
@@ -87,37 +265,7 @@ export default class ClientController {
     }
   }
 
-  async leaveMeeting(meetingDuration, meetingLeaveButton) {
-    setTimeout(async (meetingLeaveButton) => {
-      for (const [key, value] of Object.entries(this.pages)) {
-        const browserTab = 1;
-        const page = this.pages[key];
-        try {
-          this.support.log('Attempting to leave meeting');
-          const closeStatus = await page.evaluate(async (meetingLeaveButton) => {
-            return new Promise((resolve, reject) => {
-              try {
-                document.getElementById(meetingLeaveButton).click();
-                resolve('Success');
-              } catch (err) {
-                resolve('Fail');
-              }
-            });
-          }, meetingLeaveButton);
-          if (closeStatus === 'Success') {
-            this.support.log('Meeting Left', browserTab);
-            this.support.putMetricData('MeetingLeaveSuccess', 1);
-          } else {
-            this.support.error('Failed to Leave meeting from the browser ');
-            this.support.putMetricData('MeetingLeaveFail', 1);
-          }
-        } catch (err) {
-          this.support.error('Failed to end meeting ' + err, browserTab);
-          this.support.putMetricData('MeetingLeaveFail', 1);
-        }
-      }
-    }, meetingDuration, meetingLeaveButton);
-  }
+
 
   async closeBrowserTab(maxMeetingDuration) {
     setTimeout(async (meetingLeaveButton) => {
@@ -167,75 +315,9 @@ export default class ClientController {
     }
   }
 
-  async joinMeeting(joinButton) {
-    for (const [key, value] of Object.entries(this.pages)) {
-      const browserTab = 1;
-      try {
-        const page = this.pages[key];
-        if (page) {
-          await page.waitForNavigation();
-          await this.support.delay(1000);
-          const meetingStartStatus = await page.evaluate((joinButton) => {
-              return new Promise((resolve, reject) => {
-                try {
-                  document.getElementById(joinButton).click();
-                  resolve('Success');
-                } catch (err) {
-                  resolve('Fail');
-                }
-              });
-            }, joinButton);
 
-          if (meetingStartStatus === 'Success') {
-            this.support.log('Join meeting SUCCESS on tab ', browserTab);
-            this.support.putMetricData('JoinMeetingSuccess', 1);
-          } else {
-            this.support.log('Join meeting FAIL on tab ', browserTab);
-            this.support.putMetricData('JoinMeetingFail', 1);
-          }
-        }
-      } catch (err) {
-        this.support.error('Exception on page evaluate 1111 ' + err, browserTab);
-        this.support.putMetricData('MeetingStartFailPageEvaluate', 1);
-      }
-    }
-  }
 
-  async startMeetingSession(meetingId, attendeeId) {
-    for (const [key, value] of Object.entries(this.pages)) {
-      const browserTab = 1;
-      try {
-        const page = this.pages[key];
-        if (page) {
-          await page.waitForNavigation();
-          const meetingStartStatus = await page.evaluate(
-            (attendeeId, meetingId) => {
-              return new Promise((resolve, reject) => {
-                try {
-                  document.getElementById('inputMeeting').value = meetingId;
-                  document.getElementById('inputName').value = attendeeId;
-                  document.getElementById('authenticate').click();
-                  resolve('Success');
-                } catch (err) {
-                  resolve('Fail');
-                }
-              });
-            }, attendeeId, meetingId);
 
-          if (meetingStartStatus === 'Success') {
-            this.support.log('Meeting start SUCCESS on tab ', browserTab);
-            this.support.putMetricData('MeetingStartSuccess', 1);
-          } else {
-            this.support.log('Meeting start FAIL on tab ', browserTab);
-            this.support.putMetricData('MeetingStartFail', 1);
-          }
-        }
-      } catch (err) {
-        this.support.error('Exception on page evaluate1111 ' + err, browserTab);
-        this.support.putMetricData('MeetingStartFailPageEvaluate', browserTab);
-      }
-    }
-  }
 
   async fetchMetricsFromBrowser(page) {
     setTimeout(() => {

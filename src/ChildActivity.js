@@ -26,12 +26,13 @@ export default class ChildActivity {
       const clientController = new ClientController(pages, this.support);
       const meetingDuration = this.support.getRndDuration(workerData.sharedConfigParameters.maxDurationMs, workerData.sharedConfigParameters.minDurationMs);
       const meetingName = workerData.sharedConfigParameters.loadTestSessionName || 'fixed_meeting_name';
-      const attendeeName = uuidv4();
       const joinButton = 'joinButton';
       const videoButton = 'button-camera';
+      const micButton = 'button-microphone';
       const meetingLeaveButton = 'button-meeting-leave';
-      await clientController.startMeetingSession(meetingName, attendeeName);
+      await clientController.startMeetingSession(meetingName);
       await clientController.joinMeeting(joinButton);
+      await clientController.muteAttendee(micButton);
       if (workerData.videoHandleCount > 0) {
         await clientController.toggleVideo(videoButton);
         workerData.videoHandleCount -= 1;

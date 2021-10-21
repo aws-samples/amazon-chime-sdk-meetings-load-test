@@ -121,7 +121,7 @@ export default class PageActivity {
     if (pages.length > 0) {
       page = pages[0];
     } else {
-      await this.support.delay(100);
+      await this.support.delay(500);
       page = await browser.newPage().catch(async (err) => {
         this.support.error('New page failed to load...Retrying... ' + err, browserTab);
         noOfRetries += 1;
@@ -157,7 +157,7 @@ export default class PageActivity {
               this.support.log('Meeting failed to restart', browserTab);
             });
         }
-        this.support.log('Page Closedddd');
+        this.support.log('Page Closed');
       });
     }
     return page;
