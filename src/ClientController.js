@@ -6,37 +6,37 @@ export default class ClientController {
     this.support = support;
   }
 
-  async startMeetingSession(meetingId, browserTabList = []) {
+  async startMeetingSession(meetingName, browserTabList = []) {
     if (browserTabList.length > 0) {
       for (const browserTab of browserTabList) {
-        const attendeeId = await this.support.getInstanceId() + '-' + browserTab;
-        await this.startMeetingSessionOnPage(meetingId, attendeeId, browserTab, this.pages[browserTab]);
+        const attendeeName = await this.support.getAttendeeName(browserTab);
+        await this.startMeetingSessionOnPage(meetingName, attendeeName, browserTab, this.pages[browserTab]);
       }
     } else {
       for (const [browserTab, page] of Object.entries(this.pages)) {
-        const attendeeId = await this.support.getInstanceId() + '-' + browserTab;
-        await this.startMeetingSessionOnPage(meetingId, attendeeId, browserTab, page);
+        const attendeeName = await this.support.getAttendeeName(browserTab);
+        await this.startMeetingSessionOnPage(meetingName, attendeeName, browserTab, page);
       }
     }
   }
 
-  async startMeetingSessionOnPage(meetingId, attendeeId, browserTab, page) {
+  async startMeetingSessionOnPage(meetingName, attendeeName, browserTab, page) {
     try {
       if (page) {
         await page.waitForNavigation();
         const meetingStartStatus = await page.evaluate(
-          (attendeeId, meetingId) => {
+          (attendeeName, meetingName) => {
             return new Promise((resolve, reject) => {
               try {
-                document.getElementById('inputMeeting').value = meetingId;
-                document.getElementById('inputName').value = attendeeId;
+                document.getElementById('inputMeeting').value = meetingName;
+                document.getElementById('inputName').value = attendeeName;
                 document.getElementById('authenticate').click();
                 resolve('Success');
               } catch (err) {
                 resolve('Fail');
               }
             });
-          }, attendeeId, meetingId);
+          }, attendeeName, meetingName);
 
         if (meetingStartStatus === 'Success') {
           this.support.log('Meeting start SUCCESS on tab ', browserTab);

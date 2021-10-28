@@ -1,0 +1,30 @@
+{
+  "activityCommands": [
+    {
+      "meetingName": "Test3",
+      "attendeeName": "Attn3",
+      "commands": [
+        {
+          "activity": "JoinMeeting"
+        },
+        {
+          "activity": "Wait",
+          "duration": 1000
+        },
+        {
+          "activity": "TurnOnSelfCamera"
+        },
+        {
+          "activity": "SelfMute"
+        },
+        {
+          "activity": "Wait",
+          "duration": 10000
+        },
+        {
+          "activity": "LeaveMeeting"
+        }
+      ]
+    }
+  ]
+}

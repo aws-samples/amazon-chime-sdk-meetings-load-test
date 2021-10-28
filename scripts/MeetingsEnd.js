@@ -1,4 +1,5 @@
 import { createRequire } from 'module';
+import { s3BucketName } from '../configs/Constants.js';
 const require = createRequire(import.meta.url);
 const shell = require('shelljs');
 
@@ -20,5 +21,5 @@ try {
 let cmd = `CONTINGENT_AUTH=1 ~/cli/src/UCBuzzCliTools/bin/isencreds -a 306496942465 -r us-east-1 -o aws-uc-loadtest-gamma-iad-001-admin`;
 shell.exec(cmd);
 shell.exec(
-  `aws s3 cp ~/ChimeSDKMeetingsLoadTest/src/ChimeSDKMeetingsLoadTest/configs/ s3://chimesdkmeetingsloadtest/src/configs --recursive --include 'LoadTestStatus.json' --exclude '*.js' --exclude '*.sh'`
+  `aws s3 cp ~/ChimeSDKMeetingsLoadTest/src/ChimeSDKMeetingsLoadTest/configs/ s3://${s3BucketName}/src/configs --recursive --include 'LoadTestStatus.json' --exclude '*.js' --exclude '*.sh'`
 );

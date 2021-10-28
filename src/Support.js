@@ -1,4 +1,5 @@
 import {createRequire} from 'module';
+import { s3BucketName } from '../configs/Constants.js';
 
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer');
@@ -63,6 +64,10 @@ export default class Support {
     const cmd = `curl http://169.254.169.254/latest/meta-data/instance-id`;
     const instanceId = await this.runCmdAsync(cmd);
     return instanceId;
+  }
+
+  async getAttendeeName(browserTab) {
+    return await this.getInstanceId() + '-' + browserTab
   }
 
 
@@ -175,8 +180,8 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
   }
 
   transferFileToS3(fileToUpload) {
-    exec(`aws s3api put-object --bucket chimesdkmeetingsloadtest --key logs/`);
-    exec(`aws s3 cp ${fileToUpload} s3://chimesdkmeetingsloadtest/logs/ `);
+    exec(`aws s3api put-object --bucket ${s3BucketName} --key logs/`);
+    exec(`aws s3 cp ${fileToUpload} s3://${s3BucketName}/logs/ `);
   }
 
   delay(ms) {
