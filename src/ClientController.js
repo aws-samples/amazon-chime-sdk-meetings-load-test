@@ -6,16 +6,14 @@ export default class ClientController {
     this.support = support;
   }
 
-  async startMeetingSession(meetingName, browserTabList = []) {
+  async startMeetingSession(meetingId, attendeeName, browserTabList = []) {
     if (browserTabList.length > 0) {
       for (const browserTab of browserTabList) {
-        const attendeeName = await this.support.getAttendeeName(browserTab);
-        await this.startMeetingSessionOnPage(meetingName, attendeeName, browserTab, this.pages[browserTab]);
+        await this.startMeetingSessionOnPage(meetingId, attendeeName, browserTab, this.pages[browserTab]);
       }
     } else {
       for (const [browserTab, page] of Object.entries(this.pages)) {
-        const attendeeName = await this.support.getAttendeeName(browserTab);
-        await this.startMeetingSessionOnPage(meetingName, attendeeName, browserTab, page);
+        await this.startMeetingSessionOnPage(meetingId, attendeeName, browserTab, page);
       }
     }
   }
@@ -23,7 +21,8 @@ export default class ClientController {
   async startMeetingSessionOnPage(meetingName, attendeeName, browserTab, page) {
     try {
       if (page) {
-        await page.waitForNavigation();
+        await this.support.delay(5000);
+        // await page.waitForNavigation();
         const meetingStartStatus = await page.evaluate(
           (attendeeName, meetingName) => {
             return new Promise((resolve, reject) => {
@@ -67,8 +66,8 @@ export default class ClientController {
   async joinMeetingOnPage(joinButton, browserTab, page) {
     try {
       if (page) {
-        await page.waitForNavigation();
-        await this.support.delay(1000);
+        // await page.waitForNavigation();
+        await this.support.delay(2000);
         const meetingStartStatus = await page.evaluate((joinButton) => {
           return new Promise((resolve, reject) => {
             try {

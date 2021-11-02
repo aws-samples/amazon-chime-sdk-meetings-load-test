@@ -37,7 +37,7 @@ if (activityJSON.hasOwnProperty('activityCommands')) {
       commands
     };
 
-    const writeActivityToFile = `echo '${JSON.stringify(activityCommands)}' >> ${meetingName}_${attendeeName}.txt`;
+    const writeActivityToFile = `echo '${JSON.stringify(activityCommands)}' > ${meetingName}_${attendeeName}.txt`;
     shell.exec(writeActivityToFile);
     const uploadActivityFileToS3 = `aws s3 cp ${meetingName}_${attendeeName}.txt s3://${s3BucketName}/activity/`;
     shell.exec(uploadActivityFileToS3);

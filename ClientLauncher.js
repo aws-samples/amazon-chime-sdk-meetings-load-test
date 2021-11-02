@@ -4,6 +4,7 @@ import MeetingActivity from "./src/MeetingActivity.js";
 import Support from "./src/Support.js";
 import {createRequire} from 'module';
 import ConfigParameter from "./src/ConfigParameter.js";
+import { attendeeNamePrefix, putMetricDataNamespace } from './configs/Constants.js';
 const require = createRequire(import.meta.url);
 const fs = require('fs');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
@@ -26,8 +27,9 @@ export default class ClientLauncher {
     this.MIN_ACTIVE_TIME_MS = launcherArgs.minDurationMin * 60 * 1000 || 1700000;
     this.MAX_ACTIVE_TIME_MS = launcherArgs.maxDurationMin * 60 * 1000 || 2000000;
     this.METRIC_GRAB_FREQUENCY = launcherArgs.metricGrabFrequencyMin * 60 * 1000 || 1000;
-    this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || 'LoadTest';
+    this.PUT_METRIC_DATA_NAMESPACE = launcherArgs.putMetricDataNamespace || putMetricDataNamespace;
     this.LOADTEST_SESSION_NAME = launcherArgs.loadTestSessionName || this.support.getLoadTestSessionId();
+    this.ATTENDEE_NAME_PREFIX = launcherArgs.attendeeNamePrefix || attendeeNamePrefix;
     this.SESSION_PASSCODE = launcherArgs.sessionPasscode || 0;
     this.USE_EXISTING_MEETING = launcherArgs.useExistingMeeting || false;
     this.LAUNCH_SERVERLESS_CLIENTS = launcherArgs.launchServerlessClients || false;
@@ -94,9 +96,11 @@ export default class ClientLauncher {
       metricGrabFrequencyMin: this.METRIC_GRAB_FREQUENCY,
       putMetricDataNamespace: this.PUT_METRIC_DATA_NAMESPACE,
       loadTestSessionName: this.LOADTEST_SESSION_NAME,
+      attendeeNamePrefix: this.ATTENDEE_NAME_PREFIX,
       sessionPasscode: this.SESSION_PASSCODE,
       isLocalMachine: this.RUN_FROM_LOCAL_MACHINE,
-      launchServerlessClients: this.LAUNCH_SERVERLESS_CLIENTS
+      launchServerlessClients: this.LAUNCH_SERVERLESS_CLIENTS,
+      iterator: 0
     };
   }
 }
