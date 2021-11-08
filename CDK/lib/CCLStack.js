@@ -1,4 +1,4 @@
-import { Stack } from '@aws-cdk/core';
+import { Stack, Tags } from '@aws-cdk/core';
 import { Asset } from '@aws-cdk/aws-s3-assets';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,7 +27,7 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const NO_OF_EC2_INSTANCES = 1;
+const NO_OF_EC2_INSTANCES = 3;
 
 export default class CCLStack extends Stack {
   /**
@@ -93,6 +93,8 @@ export default class CCLStack extends Stack {
           storage: AmazonLinuxStorage.GENERAL_PURPOSE,
         })
       });
+
+      Tags.of(instance).add('InstanceNumber', ec2Count);
 
       const localPath = instance.userData.addS3DownloadCommand({
         bucket: asset.bucket,

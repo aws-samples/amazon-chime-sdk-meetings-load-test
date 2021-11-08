@@ -1,4 +1,4 @@
-import {createRequire} from 'module';
+import { createRequire } from 'module';
 import { s3BucketName } from '../configs/Constants.js';
 
 const require = createRequire(import.meta.url);
@@ -62,15 +62,26 @@ export default class Support {
       return 'local_machine';
     }
     const cmd = `curl http://169.254.169.254/latest/meta-data/instance-id`;
-    const instanceId = await this.runCmdAsync(cmd);
-    return instanceId;
+    return await this.runCmdAsync(cmd);
   }
 
-  async getAttendeeName(browserTab) {
-    return await this.getInstanceId() + '-' + browserTab
+  async getInstanceNumber() {
+    if (this.isLocalMachine) {
+      return 'local_machine';
+    }
+    const tagName = 'InstanceNumber';
+    const instanceId = await this.getInstanceId();
+    const region = 'us-east-1';
+    const cmd = `aws ec2 describe-instances --filters Name=instance-id,Values=${instanceId} --query 'Reservations[*].Instances[].[Tags[?Key==\`${tagName}\`].Value]' --region ${region} --output text`;
+    return await this.runCmdAsync(cmd);
   }
 
-
+  async getAttendeeName(attendeeNamePrefix, startRange, threadIterator, attendeesPerMeeting) {
+    return attendeeNamePrefix + '_'
+      + (startRange + threadIterator
+        + (await this.getInstanceNumber() * attendeesPerMeeting)
+      );
+  }
 
   setAWSToken(role) {
     exec(`

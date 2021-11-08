@@ -1,8 +1,8 @@
 {
   "activityCommands": [
     {
-      "meetingName": "Test12",
-      "attendeeName": "AttendeeName_1",
+      "meetingName": "MeetingName_1",
+      "attendeeName": "AttendeeName_11",
       "commands": [
         {
           "activity": "Wait",
@@ -20,16 +20,13 @@
         {
           "activity": "Wait",
           "duration": 10000
-        },
-        {
-          "activity": "LeaveMeeting"
         }
       ]
     },
 
     {
-      "meetingName": "Test12",
-      "attendeeName": "AttendeeName_2",
+      "meetingName": "MeetingName_1",
+      "attendeeName": "AttendeeName_12",
       "commands": [
         {
           "activity": "JoinMeeting"
@@ -49,14 +46,41 @@
           "duration": 1000000
         },
         {
-          "activity": "LeaveMeetingsss"
+          "activity": "LeaveMeeting"
         }
       ]
     },
 
     {
-      "meetingName": "Test12",
-      "attendeeName": "AttendeeName_3",
+      "meetingName": "MeetingName_1",
+      "attendeeName": "AttendeeName_13",
+      "commands": [
+        {
+          "activity": "JoinMeeting"
+        },
+        {
+          "activity": "Wait",
+          "duration": 1000
+        },
+        {
+          "activity": "ToggleSelfCamera"
+        },
+        {
+          "activity": "ToggleSelfMute"
+        },
+        {
+          "activity": "Wait",
+          "duration": 10000000
+        },
+        {
+          "activity": "LeaveMeeting"
+        }
+      ]
+    }
+    ,
+    {
+      "meetingName": "MeetingName_1",
+      "attendeeName": "AttendeeName_14",
       "commands": [
         {
           "activity": "JoinMeeting"
@@ -69,11 +93,14 @@
           "activity": "ToggleSelfMute"
         },
         {
+          "activity": "ToggleSelfCamera"
+        },
+        {
           "activity": "Wait",
           "duration": 10000000
         },
         {
-          "activity": "LeaveMeetingsss"
+          "activity": "LeaveMeeting"
         }
       ]
     }

@@ -32,9 +32,13 @@ export default class ChildActivity {
 
     if (workerData.sharedConfigParameters.launchServerlessClients) {
       workerData.sharedConfigParameters.iterator += 1;
-      const meetingDuration = this.support.getRndDuration(workerData.sharedConfigParameters.maxDurationMs, workerData.sharedConfigParameters.minDurationMs);
       const meetingName = workerData.sharedConfigParameters.loadTestSessionName;
-      const attendeeName = workerData.sharedConfigParameters.attendeeNamePrefix + '_' + (workerData.start + workerData.sharedConfigParameters.iterator);
+      const attendeeName = this.support.getAttendeeName(
+        workerData.sharedConfigParameters.attendeeNamePrefix,
+        workerData.start,
+        workerData.sharedConfigParameters.iterator,
+        workerData.sharedConfigParameters.attendeesPerMeeting
+        );
       const fileName = 'activity/' + meetingName + '_' + attendeeName + '.txt';
       await this.performActivityCommands(fileName, meetingName, attendeeName, pages);
 
@@ -136,7 +140,7 @@ export default class ChildActivity {
 
       return data.Body.toString();
     } catch (e) {
-      throw new Error(`Could not retrieve file from S3: ${e.message}`)
+      throw new Error(`Could not retrieve file ${objectKey} from S3: ${e.message}`)
     }
   }
 
