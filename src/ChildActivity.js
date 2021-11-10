@@ -33,14 +33,16 @@ export default class ChildActivity {
     if (workerData.sharedConfigParameters.launchServerlessClients) {
       workerData.sharedConfigParameters.iterator += 1;
       const meetingName = workerData.sharedConfigParameters.loadTestSessionName;
-      const attendeeName = this.support.getAttendeeName(
+      const attendeeName = await this.support.getAttendeeName(
         workerData.sharedConfigParameters.attendeeNamePrefix,
         workerData.start,
         workerData.sharedConfigParameters.iterator,
         workerData.sharedConfigParameters.attendeesPerMeeting
         );
-      const fileName = 'activity/' + meetingName + '_' + attendeeName + '.txt';
-      await this.performActivityCommands(fileName, meetingName, attendeeName, pages);
+      const genericCommandFileName = 'activity/' + meetingName + '_*.txt';
+      await this.performActivityCommands(genericCommandFileName, meetingName, attendeeName, pages);
+      const attendeeCommandFileName = 'activity/' + meetingName + '_' + attendeeName + '.txt';
+      await this.performActivityCommands(attendeeCommandFileName, meetingName, attendeeName, pages);
 
     } else {
       await pageActivity.resumeAudioContextForAllPages(pages);

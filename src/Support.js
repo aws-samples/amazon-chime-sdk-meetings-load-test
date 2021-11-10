@@ -77,7 +77,7 @@ export default class Support {
   }
 
   async getAttendeeName(attendeeNamePrefix, startRange, threadIterator, attendeesPerMeeting) {
-    return attendeeNamePrefix + '_'
+    return await this.getInstanceNumber() + ': ' +attendeeNamePrefix + '_'
       + (startRange + threadIterator
         + (await this.getInstanceNumber() * attendeesPerMeeting)
       );
@@ -185,14 +185,14 @@ TOKEN=\`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
     const accountId = (await this.getAccountDetails()).accountId;
     const instanceId = await this.getInstanceId();
     const filename = 'Log_' + accountId + '_' + instanceId;
-    fs.appendFile(filename, data + '\n', function (err) {
-      if (err) throw err;
-    });
+    // fs.appendFile(filename, data + '\n', function (err) {
+    //   if (err) throw err;
+    // });
   }
 
   transferFileToS3(fileToUpload) {
-    exec(`aws s3api put-object --bucket ${s3BucketName} --key logs/`);
-    exec(`aws s3 cp ${fileToUpload} s3://${s3BucketName}/logs/ `);
+    // exec(`aws s3api put-object --bucket ${s3BucketName} --key logs/`);
+    // exec(`aws s3 cp ${fileToUpload} s3://${s3BucketName}/logs/ `);
   }
 
   delay(ms) {
