@@ -1,11 +1,9 @@
 import ClientLauncher from '../ClientLauncher.js';
-import {createRequire} from 'module';
-import serverlessRestApiForAccountMap from '../configs/ServerlessRestApiAccountMap.js';
-import serverlessClientUrl from '../configs/ServerlessClientURL.js';
-
+import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-
-const {Worker, isMainThread, parentPort, workerData} = require('worker_threads');
+import { serverlessClientUrl } from '../configs/Constants.js';
+const { workerData } = require('worker_threads');
+import serverlessRestApiForAccountMap from '../configs/ServerlessRestApiAccountMap.js';
 
 export default class PageActivity {
   MAX_PUT_RECORD_TRY_COUNT = 3;

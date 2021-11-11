@@ -24,8 +24,6 @@ if (activityJSON.hasOwnProperty('activityCommands')) {
 
 
 function sendActivityToS3 (meetingName, attendeeName, commandList) {
-  const downloadActivityFileToS3 = `aws s3 cp s3://${s3BucketName}/activity/${meetingName}_${attendeeName}.txt .`;
-  shell.exec(downloadActivityFileToS3);
   const commands = [];
   commandList.forEach((cmd) => {
     if (!cmd.hasOwnProperty('activity')) {
