@@ -1,4 +1,4 @@
-import { Stack, Tags } from '@aws-cdk/core';
+import { Stack, Tags, RemovalPolicy } from '@aws-cdk/core';
 import { Asset } from '@aws-cdk/aws-s3-assets';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,7 +6,8 @@ import { dirname } from 'path';
 import {
   Role,
   ServicePrincipal,
-  ManagedPolicy
+  PolicyDocument,
+  PolicyStatement
 } from '@aws-cdk/aws-iam';
 import {
   AmazonLinuxGeneration,
@@ -24,10 +25,14 @@ import {
   SecurityGroup,
   Vpc
 } from '@aws-cdk/aws-ec2';
+import { Effect } from '@aws-cdk/aws-iam';
+import { Bucket } from '@aws-cdk/aws-s3';
+import { BucketDeployment, Source } from '@aws-cdk/aws-s3-deployment';
+import { s3BucketName } from '../../configs/Constants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const NO_OF_EC2_INSTANCES = 3;
+const NO_OF_EC2_INSTANCES = 1;
 
 export default class CCLStack extends Stack {
   /**
@@ -56,27 +61,36 @@ export default class CCLStack extends Stack {
 
     securityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(22), 'Allow SSH access');
 
-    // TODO: reduce policy to specifically what is needed instead of the Full Access
-    // https://sim.amazon.com/issues/P54087257
-    const role = new Role(this, 'EC2Role', {
+    const role = new Role(this, 'EC2Roles', {
       assumedBy: new ServicePrincipal('ec2.amazonaws.com'),
-      managedPolicies: [
-        ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2FullAccess'),
-        ManagedPolicy.fromAwsManagedPolicyName('AmazonS3FullAccess'),
-        ManagedPolicy.fromAwsManagedPolicyName('CloudWatchFullAccess'),
-        ManagedPolicy.fromAwsManagedPolicyName('AmazonChimeSDK'),
-        ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess'),
-        ManagedPolicy.fromAwsManagedPolicyName('AWSCloudFormationFullAccess'),
-        ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
-      ],
+      inlinePolicies: {
+        "ccl-ec2-roles": new PolicyDocument({
+          statements: [
+            new PolicyStatement({
+              effect: Effect.ALLOW,
+              actions: [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:List*",
+                "ssm:*",
+                "logs:CreateLogStream",
+                "logs:DescribeLogStreams",
+                "logs:PutLogEvents",
+                "ec2:DescribeInstances"
+              ],
+              resources: [
+                "*"
+              ]
+            })
+          ]
+        })
+      }
     });
 
     const asset = new Asset(this, 'AssetConfig', { path: path.join(__dirname, '../src/config.sh') });
 
-    // TODO: have the number of EC2 instances configurable
-    // https://sim.amazon.com/issues/P54087328
     for (let ec2Count = 0; ec2Count < NO_OF_EC2_INSTANCES; ec2Count++) {
-      const instance = new Instance(this, `CCL-Instance-${ec2Count}`, {
+      const instance = new Instance(this, `CCL-Instances-${ec2Count}`, {
         vpc,
         keyName: 'C5XLLT1',
         securityGroup,
@@ -94,7 +108,7 @@ export default class CCLStack extends Stack {
         })
       });
 
-      Tags.of(instance).add('InstanceNumber', ec2Count);
+      Tags.of(instance).add('InstanceNumber', ec2Count.toString());
 
       const localPath = instance.userData.addS3DownloadCommand({
         bucket: asset.bucket,
@@ -108,5 +122,51 @@ export default class CCLStack extends Stack {
 
       asset.grantRead(instance.role);
     }
+
+    // create a bucket for the launcher tool files and set the right policies
+    const toolCode = new Bucket(this, 'LauncherToolCodeBucket', {
+      publicReadAccess: false,
+      bucketName: s3BucketName,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true
+    });
+    const toolCodeBucketPolicy = new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        's3:GetObject',
+        's3:PutObject',
+        's3:PutObjectAcl'
+      ],
+      resources: [
+        toolCode.bucketArn,
+        `${toolCode.bucketArn}/*`
+      ],
+    });
+    toolCodeBucketPolicy.addServicePrincipal('ec2.amazonaws.com');
+    toolCode.addToResourcePolicy(toolCodeBucketPolicy);
+
+    new BucketDeployment(this, 'LauncherToolCodeBucketScripts', {
+      sources: [Source.asset('./../scripts')],
+      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/scripts',
+      destinationBucket: toolCode,
+    });
+
+    new BucketDeployment(this, 'LauncherToolCodeBucketSrc', {
+      sources: [Source.asset('./../src')],
+      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/src',
+      destinationBucket: toolCode,
+    });
+
+    new BucketDeployment(this, 'LauncherToolCodeBucketConfigs', {
+      sources: [Source.asset('./../configs')],
+      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/configs',
+      destinationBucket: toolCode,
+    });
+
+    new BucketDeployment(this, 'LauncherToolCodeBucketDependencies', {
+      sources: [Source.asset('./../package.json')],
+      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/',
+      destinationBucket: toolCode,
+    });
   }
 }
