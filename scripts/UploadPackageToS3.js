@@ -29,5 +29,9 @@ try {
 }
 
 shell.exec(`aws s3api create-bucket --bucket ${s3BucketName} --region us-east-1 --acl private`);
+shell.exec(`aws s3api put-object --bucket ${s3BucketName} --key configs/`);
+shell.exec(`aws s3api put-object --bucket ${s3BucketName} --key scripts/`);
 shell.exec(`aws s3api put-object --bucket ${s3BucketName} --key src/`);
-shell.exec(`aws s3 cp ~/ChimeSDKMeetingsLoadTest/src/ChimeSDKMeetingsLoadTest/ s3://${s3BucketName}/src/ --recursive --include '*.js' --exclude '.git/*' --exclude 'node_modules/*' --exclude 'CDK/*' --exclude '.idea/*'`);
+shell.exec(`aws s3 cp ./../configs s3://${s3BucketName}/configs/ --recursive --include '*.js' --exclude '.git/*' --exclude 'node_modules/*' --exclude 'CDK/*' --exclude '.idea/*'`);
+shell.exec(`aws s3 cp ./../scripts s3://${s3BucketName}/scripts/ --recursive --include '*.js' --exclude '.git/*' --exclude 'node_modules/*' --exclude 'CDK/*' --exclude '.idea/*'`);
+shell.exec(`aws s3 cp ./../src s3://${s3BucketName}/src/ --recursive --include '*.js' --exclude '.git/*' --exclude 'node_modules/*' --exclude 'CDK/*' --exclude '.idea/*'`);

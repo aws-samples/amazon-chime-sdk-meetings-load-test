@@ -20,7 +20,7 @@ export default class Support {
 	}
 
 	getLoadTestSessionId () {
-		const file = './configs/LoadTestStatus.json';
+		const file = '../configs/LoadTestStatus.json';
 		const rawData = fs.readFileSync(file);
 		const jsonData = JSON.parse(rawData);
 		return jsonData.LoadTestSessionId.toString();

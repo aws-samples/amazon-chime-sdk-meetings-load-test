@@ -18,7 +18,7 @@ const { isMainThread } = require('worker_threads');
 require('events').EventEmitter.prototype._maxListeners = Infinity;
 
 export default class ClientLauncher {
-  static FILE_NAME = './src/ClientLauncher.js';
+  static FILE_NAME = './ClientLauncher.js';
   static loadTestEndSignal = false;
 
   constructor() {

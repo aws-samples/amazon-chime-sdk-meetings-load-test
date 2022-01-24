@@ -81,11 +81,15 @@ export default class ChildActivity {
 		lastCommandExecuteTimestampMs[workerData.threadId][fileName] = 0;
 
 		setInterval(async() => {
+			this.support.log(`Reading file ${fileName} from the bucket ${s3BucketName}`);
 			const fileContent = await this.readCommands(s3BucketName, fileName);
 			let line = {};
 			try {
 				if (fileContent !== '') {
 					line = JSON.parse(fileContent.replace(/\n/g, ''));
+					this.support.log(line);
+				} else {
+					this.support.log('No activity commands file found.');
 				}
 			} catch (err) {
 				this.support.log('Error parsing file content');

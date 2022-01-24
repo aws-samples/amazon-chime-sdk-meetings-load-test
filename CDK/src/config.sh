@@ -21,6 +21,6 @@ cd $HOMEDIR
 sudo rm -r -f ChimeSDKMeetingsLoadTest/
 mkdir ChimeSDKMeetingsLoadTest
 sudo chmod 777 ChimeSDKMeetingsLoadTest
-aws s3 cp s3://chimesdkmeetingsloadtest/src ChimeSDKMeetingsLoadTest/ --recursive
+aws s3 cp s3://chimesdkmeetingsloadtest/ ./ --recursive
 sudo chown -R $USER /home/
 cd ~/$HOMEDIR/ChimeSDKMeetingsLoadTest/

@@ -8,10 +8,9 @@ The tool can be helpful if you wish to:
 ### Setting up the tool:
 
 1. Download the package from this repository to your local machine
-2. In the package, run `npm install` to install all the necessary packages
+2. In the package, run `yarn install` to install all the necessary packages
 3. Update the client url link with the builder created app link (in configs/Constants.js)
 4. Update the constants with the names used in the builder created app. The ones that have been set now are with respect to the Amazon Chime for JS demo app.
-
 
 
 ### Running the Amazon Chime SDK Meetings load test tool launcher
@@ -28,12 +27,6 @@ Optional parameters:
   - number of attendees each meeting will have [default = 10]
 - activeVideosPerMeeting
   - number of attendees that will turn on the video after joining the meeting [default = 0]
-- minDurationMin
-  - minimum duration a meeting will be active [default = 20 mins]
-- maxDurationMin
-  - maximum duration a meeting will be active [default = 20.5 mins]
-- metricGrabFrequencyMin
-  - frequency at which the the metrics should be fetched from the browser running the localhost client [default = 0.016 min = 1 sec]
 - putMetricDataNamespace
   - name of the namespace to view the metrics
 - loadTestSessionName
@@ -42,7 +35,7 @@ Optional parameters:
 Usage:
 
 ```
-node ClientLauncher.js --meetingCount 50 --attendeesPerMeeting 10 --minDurationMin 20 --maxDurationMin 30
+node ClientLauncher.js --attendeesPerMeeting 10 --activeVideosPerMeeting 2
 ```
 
 
@@ -54,6 +47,7 @@ At the root level, the package consists of 4 different directory, the Client Lau
 2. src/: The directory consists of the Activity files that the ClientLauncher is dependent on
 3. configs/ : Consists of account information and the LoadTest Status
 4. CDK/ : This consists of the infra setup code, needed for running the load test which can be modified before each test based on the requirements of the number of EC2 instances needed to be deployed in an account.
+
 
 ### Running the LoadTestResult from the local machine:
 

@@ -1,12 +1,8 @@
-## Useful commands
-
- * `npm run test`         perform the jest unit tests
- * `cdk deploy`           deploy this stack to your default AWS account/region
- * `cdk diff`             compare deployed stack with current state
- * `cdk synth`            emits the synthesized CloudFormation template
-
+The CDK script provided with the tool will help set up the infrastructure needed to run the load test.
+The stack name used here is CCLStack - this can be changed from the Constants.js file in the configs directory.
 
 ## Getting started
-1. In the terminal, head to the CDK directory 
-2. Verify changes by running the `cdk diff` command 
-3. Deploy the stack using the `cdk deploy` command
+Ensure AWS credentials of the desired account is already setup.
+1. `cd CDK`
+2. `yarn install`
+3. `yarn deploy`

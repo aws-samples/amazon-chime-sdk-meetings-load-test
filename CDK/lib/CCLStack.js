@@ -124,7 +124,7 @@ export default class CCLStack extends Stack {
     }
 
     // create a bucket for the launcher tool files and set the right policies
-    const toolCode = new Bucket(this, 'LauncherToolCodeBucket', {
+    const toolCodeBucket = new Bucket(this, 'LauncherToolCodeBucket', {
       publicReadAccess: false,
       bucketName: s3BucketName,
       removalPolicy: RemovalPolicy.DESTROY,
@@ -138,35 +138,34 @@ export default class CCLStack extends Stack {
         's3:PutObjectAcl'
       ],
       resources: [
-        toolCode.bucketArn,
-        `${toolCode.bucketArn}/*`
+        toolCodeBucket.bucketArn,
+        `${toolCodeBucket.bucketArn}/*`
       ],
     });
     toolCodeBucketPolicy.addServicePrincipal('ec2.amazonaws.com');
-    toolCode.addToResourcePolicy(toolCodeBucketPolicy);
+    toolCodeBucket.addToResourcePolicy(toolCodeBucketPolicy);
 
     new BucketDeployment(this, 'LauncherToolCodeBucketScripts', {
       sources: [Source.asset('./../scripts')],
-      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/scripts',
-      destinationBucket: toolCode,
+      destinationKeyPrefix: 'scripts',
+      destinationBucket: toolCodeBucket,
     });
 
     new BucketDeployment(this, 'LauncherToolCodeBucketSrc', {
       sources: [Source.asset('./../src')],
-      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/src',
-      destinationBucket: toolCode,
+      destinationKeyPrefix: 'src',
+      destinationBucket: toolCodeBucket,
     });
 
     new BucketDeployment(this, 'LauncherToolCodeBucketConfigs', {
       sources: [Source.asset('./../configs')],
-      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/configs',
-      destinationBucket: toolCode,
+      destinationKeyPrefix: 'configs',
+      destinationBucket: toolCodeBucket,
     });
 
     new BucketDeployment(this, 'LauncherToolCodeBucketDependencies', {
-      sources: [Source.asset('./../package.json')],
-      destinationKeyPrefix: 'ChimeSDKMeetingsLoadTest/',
-      destinationBucket: toolCode,
+       sources: [Source.asset('./../', { exclude: ['**', '!package.json'] } )],
+      destinationBucket: toolCodeBucket,
     });
   }
 }

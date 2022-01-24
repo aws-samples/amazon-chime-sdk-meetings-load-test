@@ -8,19 +8,22 @@
   "scripts": {
     "build": "echo \"The build step is not required when using JavaScript!\" && exit 0",
     "cdk": "cdk",
-    "test": "jest"
+    "test": "jest",
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy"
   },
   "devDependencies": {
-    "@aws-cdk/assert": "1.118.0",
-    "@aws-cdk/aws-lambda": "^1.122.0",
-    "@aws-cdk/aws-s3": "^1.124.0",
-    "@aws-cdk/aws-s3-assets": "^1.122.0",
-    "aws-cdk": "1.118.0",
-    "cdk-ec2-key-pair": "^2.2.1"
+    "@aws-cdk/assert": "latest",
+    "@aws-cdk/aws-lambda": "latest",
+    "@aws-cdk/aws-s3": "latest",
+    "@aws-cdk/aws-s3-assets": "latest",
+    "aws-cdk": "latest",
+    "cdk-ec2-key-pair": "latest"
   },
   "dependencies": {
     "@aws-cdk/aws-ec2": "latest",
+    "@aws-cdk/aws-s3-deployment": "latest",
     "@aws-cdk/aws-iam": "latest",
-    "@aws-cdk/core": "1.118.0"
+    "@aws-cdk/core": "latest"
   }
 }
