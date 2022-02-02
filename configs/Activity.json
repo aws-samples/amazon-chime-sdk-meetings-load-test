@@ -1,0 +1,44 @@
+{
+  "activityCommands": [
+    {
+      "meetingName": "MeetingTest1",
+      "attendeeName": "*",
+      "commands": [
+        {
+          "activity": "Wait",
+          "duration": 1000
+        },
+        {
+          "activity": "JoinMeeting"
+        },
+        {
+          "activity": "LocalMute"
+        },
+        {
+          "activity": "TurnOnLocalCamera"
+        }
+      ]
+    },
+
+    {
+      "meetingName": "MeetingTest1",
+      "attendeeName": "Attendee_1",
+      "commands": [
+        {
+          "activity": "Wait",
+          "duration": 10000
+        },
+        {
+          "activity": "TurnOffLocalCamera"
+        },
+        {
+          "activity": "Wait",
+          "duration": 30000
+        },
+        {
+          "activity": "LeaveMeeting"
+        }
+      ]
+    }
+  ]
+}
