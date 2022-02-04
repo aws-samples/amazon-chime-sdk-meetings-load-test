@@ -44,6 +44,33 @@ export default class CCLStack extends Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
+    // create a bucket for the launcher tool files and set the right policies
+    const toolCodeBucket = new Bucket(this, 'LauncherToolCodeBucket', {
+      publicReadAccess: false,
+      bucketName: s3BucketName,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true
+    });
+    const toolCodeBucketPolicy = new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        's3:GetObject',
+        's3:PutObject',
+        's3:PutObjectAcl'
+      ],
+      resources: [
+        toolCodeBucket.bucketArn,
+        `${toolCodeBucket.bucketArn}/*`
+      ],
+    });
+    toolCodeBucketPolicy.addServicePrincipal('ec2.amazonaws.com');
+    toolCodeBucket.addToResourcePolicy(toolCodeBucketPolicy);
+
+    new BucketDeployment(this, 'LauncherToolCode', {
+      sources: [Source.asset('./', { exclude: ['**', '!AmazonChimeSDKMeetingsLoadTest.zip'] } )],
+      destinationBucket: toolCodeBucket,
+    });
+
     const vpc = new Vpc(this, 'VPC', {
       natGateways: 0,
       subnetConfiguration: [{
@@ -122,50 +149,5 @@ export default class CCLStack extends Stack {
 
       asset.grantRead(instance.role);
     }
-
-    // create a bucket for the launcher tool files and set the right policies
-    const toolCodeBucket = new Bucket(this, 'LauncherToolCodeBucket', {
-      publicReadAccess: false,
-      bucketName: s3BucketName,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true
-    });
-    const toolCodeBucketPolicy = new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        's3:GetObject',
-        's3:PutObject',
-        's3:PutObjectAcl'
-      ],
-      resources: [
-        toolCodeBucket.bucketArn,
-        `${toolCodeBucket.bucketArn}/*`
-      ],
-    });
-    toolCodeBucketPolicy.addServicePrincipal('ec2.amazonaws.com');
-    toolCodeBucket.addToResourcePolicy(toolCodeBucketPolicy);
-
-    new BucketDeployment(this, 'LauncherToolCodeBucketScripts', {
-      sources: [Source.asset('./../scripts')],
-      destinationKeyPrefix: 'scripts',
-      destinationBucket: toolCodeBucket,
-    });
-
-    new BucketDeployment(this, 'LauncherToolCodeBucketSrc', {
-      sources: [Source.asset('./../src')],
-      destinationKeyPrefix: 'src',
-      destinationBucket: toolCodeBucket,
-    });
-
-    new BucketDeployment(this, 'LauncherToolCodeBucketConfigs', {
-      sources: [Source.asset('./../configs')],
-      destinationKeyPrefix: 'configs',
-      destinationBucket: toolCodeBucket,
-    });
-
-    new BucketDeployment(this, 'LauncherToolCodeBucketDependencies', {
-       sources: [Source.asset('./../', { exclude: ['**', '!package.json'] } )],
-      destinationBucket: toolCodeBucket,
-    });
   }
 }

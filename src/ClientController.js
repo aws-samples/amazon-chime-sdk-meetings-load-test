@@ -20,7 +20,7 @@ export default class ClientController {
 	async startMeetingSessionOnPage(meetingName, attendeeName, browserTab, page, inputMeetingTextBox, inputNameTextBox, authenticateButton) {
 		try {
 			if (page) {
-				await this.support.delay(5000);
+				await this.support.delay(2000);
 				const meetingStartStatus = await page.evaluate(
 					(attendeeName, meetingName, inputMeetingTextBox, inputNameTextBox, authenticateButton) => {
 						return new Promise((resolve) => {
@@ -64,8 +64,7 @@ export default class ClientController {
 	async joinMeetingOnPage(joinButton, browserTab, page) {
 		try {
 			if (page) {
-				// await page.waitForNavigation();
-				await this.support.delay(2000);
+				await this.support.delay(5000);
 				const meetingStartStatus = await page.evaluate((joinButton) => {
 					return new Promise((resolve, reject) => {
 						try {
