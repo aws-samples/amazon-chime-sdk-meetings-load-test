@@ -87,9 +87,8 @@ export default class ChildActivity {
 			try {
 				if (fileContent !== '') {
 					line = JSON.parse(fileContent.replace(/\n/g, ''));
-					this.support.log(line);
 				} else {
-					this.support.log('No activity commands file found.');
+					this.support.log('No activity commands file found');
 				}
 			} catch (err) {
 				this.support.log('Error parsing file content');

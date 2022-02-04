@@ -39,7 +39,7 @@ node ClientLauncher.js --attendeesPerMeeting 10 --activeVideosPerMeeting 2
 ```
 
 
-### Structure of the ChimeSDKMeetingsLoadTest Package:
+### Structure of the AmazonChimeSDKMeetingsLoadTest Package:
 
 At the root level, the package consists of 4 different directory, the Client Launcher invoker file ClientLauncher.js and the Cleanup.js.
 

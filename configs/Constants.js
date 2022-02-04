@@ -1,4 +1,4 @@
-export const s3BucketName = 'chimesdkmeetingsloadtest';
+export const s3BucketName = 'amazonchimesdkmeetingsloadtest';
 
 export const putMetricDataNamespace = 'LoadTest';
 export const clientUrl = 'client-url-link';
