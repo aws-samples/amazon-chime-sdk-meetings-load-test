@@ -31,7 +31,9 @@ Optional parameters:
   - name of the namespace to view the metrics
 - loadTestSessionName
   - session name assigned to the load test
-
+- isLocalMachine
+  - to run the test on your local machine
+  
 Usage:
 
 ```

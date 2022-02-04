@@ -103,7 +103,11 @@ export default class CCLStack extends Stack {
                 "logs:CreateLogStream",
                 "logs:DescribeLogStreams",
                 "logs:PutLogEvents",
-                "ec2:DescribeInstances"
+                "ec2:DescribeInstanceStatus",
+                "ec2:DescribeInstances",
+                "ssm:SendCommand",
+                "ssm:ListInstanceAssociations",
+                "ssm:UpdateInstanceInformation",
               ],
               resources: [
                 "*"

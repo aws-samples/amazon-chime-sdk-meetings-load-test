@@ -48,7 +48,7 @@ export default class ClientLauncher {
 
   async run() {
     if (isMainThread) {
-      this.support.putMetricData('LauncherRunning', 500);
+      this.support.putMetricData('LauncherRunning', 1);
       const threads = new Set();
       const sharedConfigParameters = this.getSharedConfigParameters();
       const threadActivity = new ThreadActivity(sharedConfigParameters, this.support);
@@ -56,7 +56,7 @@ export default class ClientLauncher {
       this.support.log('ThreadCount: ' + this.threadsCount);
       this.support.log('No Of Meetings: ' + this.noOfMeetings);
       this.support.log('No Of Attendees: ' + this.attendeesPerMeetingCount);
-      this.support.putMetricData('meetingAttendeeObjectsLength', this.attendeesPerMeetingCount);
+      this.support.putMetricData('MeetingAttendeeObjectsLength', this.noOfMeetings * this.attendeesPerMeetingCount);
 
       const loadTestStartTimeStampEpoch = Date.now();
       await threadActivity.spawnThreads(
