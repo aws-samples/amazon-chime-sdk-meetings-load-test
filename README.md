@@ -19,25 +19,20 @@ Run the launcher using `node ClientLauncher.js` <optional parameters> in the src
 
 Optional parameters:
 
-- meetingCount
-  - number of meetings to be handled by launcher [default = constant * core size]
-- threadsCount
-  - number of threads to be spawned [default = core size]
-- attendeesPerMeeting
-  - number of attendees each meeting will have [default = 10]
-- activeVideosPerMeeting
-  - number of attendees that will turn on the video after joining the meeting [default = 0]
-- putMetricDataNamespace
-  - name of the namespace to view the metrics
-- loadTestSessionName
-  - session name assigned to the load test
-- isLocalMachine
-  - to run the test on your local machine
+||||
+|--- |--- |--- |
+|Parameter|Meaning|Default Value|
+|threadsCount|Defines the number of threads to be spawned per Amazon EC2 instance for launching the clients. A number smaller than the instance core size will simulate scenarios of a machine running multiple applications in the background. Note: A higher number than the instance core size is not recommended in this scenario.|An integer, equal to the virtual CPU count of the EC2 instance.|
+|attendeesPerMeeting|Defines the number of attendees to be spawned per Amazon EC2 instance running against a meeting name.|10|
+|loadTestSessionName|Defines the meetingName when launching the clients. on the Session name assigned to the load test.|"MeetingLoadTest"|
+|attendeeNamePrefix|Defines the fixed prefix name for all attendees in a meeting. Attendee names in the client appear with the prefix followed by a number.|"Attendee"|
+|localMachine|Use this parameter if running the load test from the local machine.|false|
+
   
 Usage:
 
 ```
-node ClientLauncher.js --attendeesPerMeeting 10 --activeVideosPerMeeting 2
+node ClientLauncher.js --attendeesPerMeeting 10 
 ```
 
 

@@ -9,7 +9,7 @@
     "build": "echo \"The build step is not required when using JavaScript!\" && exit 0",
     "cdk": "cdk",
     "test": "jest",
-    "deploy": "cdk deploy",
+    "deploy": "zip AmazonChimeSDKMeetingsLoadTest.zip -r ./../configs/ ./../src/ package.json && cdk deploy && rm AmazonChimeSDKMeetingsLoadTest.zip",
     "destroy": "cdk destroy"
   },
   "devDependencies": {

@@ -1,27 +1,18 @@
 import ClientLauncher from './ClientLauncher.js';
 import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
 import { clientUrl } from '../configs/Constants.js';
-const { workerData } = require('worker_threads');
 
 export default class PageActivity {
   MAX_NO_OF_RETRIES = 3;
 
   constructor(support) {
     this.support = support;
-    const sharedConfigParameters = workerData.sharedConfigParameters;
-    this.sessionPasscode = sharedConfigParameters.sessionPasscode;
-    this.activeVideosPerMeeting = sharedConfigParameters.activeVideosPerMeeting;
-    this.launchServerlessClients = sharedConfigParameters.launchServerlessClients;
   }
 
   async openLinkInPage(page, meetingInfo, attendeeInfo, browserTab) {
     for (let tryCount = 0; tryCount < this.MAX_NO_OF_RETRIES; tryCount++) {
       if (page) {
-        let url = '';
-        if (this.launchServerlessClients) {
-          url = clientUrl;
-        }
+        const url = clientUrl;
         this.support.log(url);
         try {
           page.setDefaultNavigationTimeout(0);

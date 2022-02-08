@@ -1,7 +1,7 @@
 {
   "activityCommands": [
     {
-      "meetingName": "MeetingTest1",
+      "meetingName": "MeetingLoadTest",
       "attendeeName": "*",
       "commands": [
         {
@@ -21,7 +21,7 @@
     },
 
     {
-      "meetingName": "MeetingTest1",
+      "meetingName": "MeetingLoadTest",
       "attendeeName": "Attendee_1",
       "commands": [
         {

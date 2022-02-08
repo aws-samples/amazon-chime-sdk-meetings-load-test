@@ -10,21 +10,12 @@ export default class ThreadActivity {
 	}
 
 	async spawnThreads(threadCount, threads, loadTestStartTimeStampEpoch) {
-		let totalNoOfVideos = this.sharedConfigParameters.activeVideosPerMeeting;
 		const max = this.sharedConfigParameters.attendeesPerMeeting;
 		const min = 0;
 		this.support.log(`Running with ${threadCount} threads...`);
 		let start = min;
 		const accountId = (await this.support.getAccountDetails()).accountId;
 		const instanceId = await this.support.getInstanceId();
-		const noOfVideosThreadHandle = [];
-		for (let threadId = 0; threadId < threadCount; threadId++) {
-			noOfVideosThreadHandle[threadId] = 0;
-		}
-		for (let threadId = 0; threadId < threadCount && totalNoOfVideos > 0; threadId++) {
-			noOfVideosThreadHandle[threadId] += 1;
-			totalNoOfVideos -= 1;
-		}
 		if (max % threadCount === 0) {
 			const range = max / threadCount;
 			for (let threadId = 0; threadId < threadCount; threadId++) {
@@ -37,8 +28,7 @@ export default class ThreadActivity {
 						threadId,
 						loadTestStartTimeStampEpoch,
 						instanceId,
-						accountId,
-						noOfVideosThreadHandle[threadId]
+						accountId
 					)
 				);
 				this.support.putMetricData('ThreadCreated', 1);
@@ -63,8 +53,7 @@ export default class ThreadActivity {
 							threadId,
 							loadTestStartTimeStampEpoch,
 							instanceId,
-							accountId,
-							noOfVideosThreadHandle[threadId]
+							accountId
 						)
 					);
 					this.support.putMetricData('ThreadCreated', 1);
@@ -78,8 +67,7 @@ export default class ThreadActivity {
 							threadId,
 							loadTestStartTimeStampEpoch,
 							instanceId,
-							accountId,
-							noOfVideosThreadHandle[threadId]
+							accountId
 						)
 					);
 					this.support.putMetricData('ThreadCreated', 1);
@@ -107,20 +95,8 @@ export default class ThreadActivity {
 
 			worker.on('message', async (message) => {
 				const threadId = message.threadId;
-				const accountId = message.accountId;
-				const instanceId = message.instanceId;
 				this.support.log('ThreadId complete ', threadId);
-				const filename = 'Log_' + accountId + '_' + instanceId;
 				this.support.putMetricData('ChildThreadActivityComplete', 1);
-				if(this.sharedConfigParameters.sessionPasscode !== 0) {
-					threads.delete(worker);
-					if (threads.size === 0) {
-						this.support.log('Threads ending');
-						this.support.putMetricData('ThreadExit', 1);
-						this.support.done = 1;
-						process.exit(1);
-					}
-				}
 			});
 		}
 	}
@@ -131,8 +107,7 @@ export default class ThreadActivity {
 		threadId,
 		loadTestStartTimeStampEpoch,
 		instanceId,
-		accountId,
-		videoHandleCount
+		accountId
 	) {
 		return new Worker(ClientLauncher.FILE_NAME, {
 			workerData: {
@@ -142,8 +117,7 @@ export default class ThreadActivity {
 				loadTestStartTimeStampEpoch: loadTestStartTimeStampEpoch,
 				instanceId: instanceId,
 				accountId: accountId,
-				sharedConfigParameters: this.sharedConfigParameters,
-				videoHandleCount
+				sharedConfigParameters: this.sharedConfigParameters
 			},
 		});
 	}

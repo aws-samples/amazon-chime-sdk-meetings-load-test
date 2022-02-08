@@ -118,14 +118,6 @@ export default class Support {
 		putMetric(instanceId, startTime, metricName, metricValue);
 	}
 
-	getNoOfMeetingsBasedOnCoreSize() {
-		const cpuCount = os.cpus().length;
-		if (cpuCount >= 36) {
-			return Math.floor(cpuCount * 0.10);
-		}
-		return Math.floor(cpuCount * 0.08);
-	}
-
 	getNoOThreadsBasedOnCoreSize() {
 		const cpuCount = os.cpus().length;
 		return Math.ceil(cpuCount);
