@@ -17,22 +17,17 @@ export default class ConfigParameter {
 		if (Object.keys(launcherArgs).length > 1) {
 			const expectedParameters = {
 				_: typeof [],
-				meetingCount: 'number',
 				threadsCount: 'number',
 				attendeesPerMeeting: 'number',
-				activeVideosPerMeeting: 'number',
 				minDurationMin: 'number',
 				maxDurationMin: 'number',
-				metricGrabFrequencyMin: 'number',
 				putMetricDataNamespace: 'string',
 				loadTestSessionName: 'string',
-				sessionPasscode: 'number',
 				localMachine: 'boolean',
 				useExistingMeeting: 'boolean',
 				generateMultipleAttendeesForMultipleMeetings: 'boolean',
 				generateMultipleAttendeesForAMeeting: 'boolean',
-				generateAttendeesAgainstMeetingPin: 'boolean',
-				launchServerlessClients: 'boolean'
+				generateAttendeesAgainstMeetingPin: 'boolean'
 			};
 
 			for (let [paramName, paramType] of Object.entries(launcherArgs)) {
@@ -47,12 +42,6 @@ export default class ConfigParameter {
 					process.exit(1);
 				}
 
-				if (paramName === 'sessionPasscode' && launcherArgs['sessionPasscode'].toString().length !== 10) {
-					console.log('Parameter `sessionPasscode` should be 10 digits');
-					console.log('Current typeof sessionPasscode', typeof launcherArgs['sessionPasscode'].toString());
-					console.log('Current length sessionPasscode', launcherArgs['sessionPasscode'].toString().length);
-					process.exit(1);
-				}
 			}
 		}
 	}

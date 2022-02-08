@@ -88,7 +88,7 @@ export default class CCLStack extends Stack {
 
     securityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(22), 'Allow SSH access');
 
-    const role = new Role(this, 'EC2Roles', {
+    const role = new Role(this, 'EC2Role', {
       assumedBy: new ServicePrincipal('ec2.amazonaws.com'),
       inlinePolicies: {
         "ccl-ec2-roles": new PolicyDocument({
@@ -105,9 +105,24 @@ export default class CCLStack extends Stack {
                 "logs:PutLogEvents",
                 "ec2:DescribeInstanceStatus",
                 "ec2:DescribeInstances",
+                "ec2:RunInstances",
                 "ssm:SendCommand",
                 "ssm:ListInstanceAssociations",
                 "ssm:UpdateInstanceInformation",
+                "ssmmessages:CreateControlChannel",
+                "ssmmessages:CreateDataChannel",
+                "ssmmessages:OpenControlChannel",
+                "ssmmessages:OpenDataChannel",
+                "ec2messages:AcknowledgeMessage",
+                "ec2messages:DeleteMessage",
+                "ec2messages:FailMessage",
+                "ec2messages:GetEndpoint",
+                "ec2messages:GetMessages",
+                "ec2messages:SendReply",
+                "ds:CreateComputer",
+                "ds:DescribeDirectories",
+                "ec2:DescribeInstanceStatus",
+                "cloudwatch:PutMetricData",
               ],
               resources: [
                 "*"
@@ -121,7 +136,7 @@ export default class CCLStack extends Stack {
     const asset = new Asset(this, 'AssetConfig', { path: path.join(__dirname, '../src/config.sh') });
 
     for (let ec2Count = 0; ec2Count < NO_OF_EC2_INSTANCES; ec2Count++) {
-      const instance = new Instance(this, `CCL-Instances-${ec2Count}`, {
+      const instance = new Instance(this, `CCL-Instance-${ec2Count}`, {
         vpc,
         keyName: 'C5XLLT1',
         securityGroup,
