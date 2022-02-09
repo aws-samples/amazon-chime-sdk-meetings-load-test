@@ -36,15 +36,15 @@ export default class ClientController {
 					}, attendeeName, meetingName, inputMeetingTextBox, inputNameTextBox, authenticateButton );
 
 				if (meetingStartStatus === 'Success') {
-					this.support.log('Meeting start success on tab ', browserTab);
+					this.support.log('Meeting start successful', browserTab);
 					this.support.putMetricData('MeetingStartSuccess', 1);
 				} else {
-					this.support.log('Meeting start failed on tab ', browserTab);
+					this.support.log('Meeting start failed', browserTab);
 					this.support.putMetricData('MeetingStartFail', 1);
 				}
 			}
 		} catch (err) {
-			this.support.error('Exception on page evaluate ' + err, browserTab);
+			this.support.error('Meeting start failed. ' + err, browserTab);
 			this.support.putMetricData('MeetingStartFailPageEvaluate', browserTab);
 		}
 	}
@@ -77,15 +77,15 @@ export default class ClientController {
 				}, joinButton);
 
 				if (meetingStartStatus === 'Success') {
-					this.support.log('Join meeting SUCCESS on tab ', browserTab);
+					this.support.log('Join meeting successful', browserTab);
 					this.support.putMetricData('JoinMeetingSuccess', 1);
 				} else {
-					this.support.log('Join meeting FAIL on tab ', browserTab);
+					this.support.log('Join meeting failed', browserTab);
 					this.support.putMetricData('JoinMeetingFail', 1);
 				}
 			}
 		} catch (err) {
-			this.support.error('Exception on page evaluate ' + err, browserTab);
+			this.support.error('Join meeting failed. ' + err, browserTab);
 			this.support.putMetricData('MeetingStartFailPageEvaluate', 1);
 		}
 	}
@@ -105,7 +105,7 @@ export default class ClientController {
 	async toggleVideoOnPage(cameraButton, browserTab, page) {
 		try {
 			if (page) {
-				this.support.log('Attempting to toggle video on', browserTab);
+				this.support.log('Attempting to toggle video', browserTab);
 				const videoToggle = await page.evaluate(async (cameraButton) => {
 					return new Promise((resolve, reject) => {
 						try {
@@ -117,13 +117,13 @@ export default class ClientController {
 					});
 				}, cameraButton);
 				if (videoToggle === 'Success') {
-					this.support.log('Video toggled on tab #', browserTab);
+					this.support.log('Video toggle successful', browserTab);
 				} else {
-					this.support.error('Failed to toggle video on tab #', browserTab);
+					this.support.error('Video toggle failed', browserTab);
 				}
 			}
 		} catch (err) {
-			this.support.error('Failed to toggle video on tab # ', browserTab + ' due to ' + err);
+			this.support.error('Video toggle failed. ' + err, browserTab);
 		}
 	}
 
@@ -142,7 +142,7 @@ export default class ClientController {
 	async muteAttendeeOnPage(muteButton, browserTab, page) {
 		try {
 			if (page) {
-				this.support.log(`Attempting to toggle mute on ${browserTab}`);
+				this.support.log('Attempting to toggle mute', browserTab);
 				const muteToggle = await page.evaluate(async (muteButton) => {
 					return new Promise((resolve, reject) => {
 						try {
@@ -154,13 +154,13 @@ export default class ClientController {
 					});
 				}, muteButton);
 				if (muteToggle === 'Success') {
-					this.support.log(`Mute toggled on tab #${browserTab}`);
+					this.support.log('Mute toggle successful', browserTab);
 				} else {
-					this.support.error(`Failed to toggle mute on tab #${browserTab}`);
+					this.support.error('Mute toggle failed', browserTab);
 				}
 			}
 		} catch (err) {
-			this.support.error(`Failed to toggle mute on tab #${browserTab} due to ${err}`);
+			this.support.error('Mute toggle failed. ' + err, browserTab);
 		}
 	}
 
@@ -194,14 +194,14 @@ export default class ClientController {
 				});
 			}, meetingLeaveButton);
 			if (closeStatus === 'Success') {
-				this.support.log('Attendee left meeting', browserTab);
+				this.support.log('Attendee successfully left meeting', browserTab);
 				this.support.putMetricData('MeetingLeaveSuccess', 1);
 			} else {
-				this.support.error('Failed to leave meeting from the browser ');
+				this.support.error('Attendee failed to leave meeting', browserTab);
 				this.support.putMetricData('MeetingLeaveFail', 1);
 			}
 		} catch (err) {
-			this.support.error('Failed to leave meeting ' + err, browserTab);
+			this.support.error('Attendee failed to leave meeting ' + err, browserTab);
 			this.support.putMetricData('MeetingLeaveFail', 1);
 		}
 	}

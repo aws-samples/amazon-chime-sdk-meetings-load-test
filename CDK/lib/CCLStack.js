@@ -138,7 +138,6 @@ export default class CCLStack extends Stack {
     for (let ec2Count = 0; ec2Count < NO_OF_EC2_INSTANCES; ec2Count++) {
       const instance = new Instance(this, `CCL-Instance-${ec2Count}`, {
         vpc,
-        keyName: 'C5XLLT1',
         securityGroup,
         role,
         instanceName: `ccl-instance-${ec2Count}`,
